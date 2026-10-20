@@ -22,6 +22,9 @@ export const IconUserPlus = (p: P) => (
 export const IconCheers = (p: P) => (
   <svg {...base} {...p}><path d="m4 9 3.5-5 4 2.5-2 5.5a2.5 2.5 0 0 1-3.6 1.3L4.8 12.6A2.5 2.5 0 0 1 4 9z" /><path d="m20 9-3.5-5-4 2.5 2 5.5a2.5 2.5 0 0 0 3.6 1.3l1.1-.7A2.5 2.5 0 0 0 20 9z" /><path d="M7.5 14 6 20M16.5 14l1.5 6M4 20h4M16 20h4" /></svg>
 );
+export const IconCompare = (p: P) => (
+  <svg {...base} {...p}><path d="M8 3v18" /><path d="M16 3v18" /><path d="M3 8h5M3 14h5M16 10h5M16 16h5" /></svg>
+);
 export const IconShield = (p: P) => (
   <svg {...base} {...p}><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z" /><path d="m9 12 2 2 4-4" /></svg>
 );

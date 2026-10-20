@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData, type UserStats } from '../data';
+import { achievementsFor, type UserAchievements } from '../achievements';
 import { Avatar, Card } from '../components/ui';
 import { IconDownload, IconSearch } from '../components/icons';
 import { addDays, displayName, fmtDate, fmtLiters, fmtNum, fmtRelative, startOfDay } from '../utils';
 
-type SortKey = 'name' | 'createdAt' | 'lastLogin' | 'beerCount' | 'totalCl' | 'lastBeer' | 'currentStreak' | 'friends';
+type SortKey = 'name' | 'createdAt' | 'lastLogin' | 'beerCount' | 'totalCl' | 'lastBeer' | 'currentStreak' | 'friends' | 'achievements';
 type Filter = 'all' | 'active' | 'inactive' | 'never' | 'new';
 type Status = 'drinking' | 'active' | 'new' | 'inactive' | 'never';
 
@@ -16,6 +17,7 @@ const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
   { key: 'totalCl', label: 'Volume', numeric: true },
   { key: 'currentStreak', label: 'Reeks', numeric: true },
   { key: 'friends', label: 'Vrienden', numeric: true },
+  { key: 'achievements', label: 'Achievements', numeric: true },
   { key: 'createdAt', label: 'Lid sinds' },
   { key: 'lastLogin', label: 'Laatst ingelogd' },
 ];
@@ -35,8 +37,9 @@ function statusOf(u: UserStats, now: Date): Status {
   return u.beerCount ? 'inactive' : 'never';
 }
 
-function sortValue(u: UserStats, key: SortKey): number | string {
+function sortValue(u: UserStats, key: SortKey, ach: Map<string, UserAchievements>): number | string {
   switch (key) {
+    case 'achievements': return ach.get(u.uid)?.unlocked ?? 0;
     case 'name': return displayName(u).toLowerCase();
     case 'createdAt': return u.createdAt?.getTime() ?? 0;
     case 'lastLogin': return u.lastLogin?.getTime() ?? 0;
@@ -69,6 +72,7 @@ export default function Users() {
 
   const freshUids = useMemo(() => new Set(events.filter((e) => e.kind === 'signup').map((e) => e.uid)), [events]);
 
+  const ach = useMemo(() => achievementsFor(data!), [data]);
   const withStatus = useMemo(() => data!.users.map((u) => ({ u, status: statusOf(u, now) })), [data, now]);
 
   const counts = useMemo(() => {
@@ -90,11 +94,11 @@ export default function Users() {
     });
     const dir = sort.desc ? -1 : 1;
     return list.sort((a, b) => {
-      const va = sortValue(a.u, sort.key);
-      const vb = sortValue(b.u, sort.key);
+      const va = sortValue(a.u, sort.key, ach);
+      const vb = sortValue(b.u, sort.key, ach);
       return va < vb ? -dir : va > vb ? dir : 0;
     });
-  }, [withStatus, query, filter, sort]);
+  }, [withStatus, query, filter, sort, ach]);
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== 'name' }));
@@ -206,6 +210,7 @@ export default function Users() {
                     <span className="muted small"> / {u.longestStreak}</span>
                   </td>
                   <td className="num">{u.friendIds.length || '—'}</td>
+                  <td className="num">{ach.get(u.uid)?.unlocked ?? 0}</td>
                   <td>{fmtDate(u.createdAt)}</td>
                   <td title={u.lastLogin?.toLocaleString('nl-NL')}>{fmtRelative(u.lastLogin, now)}</td>
                 </tr>

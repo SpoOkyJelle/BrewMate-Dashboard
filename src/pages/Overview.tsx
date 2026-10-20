@@ -7,6 +7,8 @@ import { useData, type Dataset } from '../data';
 import { Avatar, Card, Empty, Metric, Odometer, Segmented, useChartProps } from '../components/ui';
 import { Funnel, WeekHourHeatmap } from '../components/charts';
 import { LiveFeed } from '../components/live';
+import { AchievementRarity } from '../components/achievements';
+import { achievementsFor } from '../achievements';
 import {
   addDays, dayKey, displayName, fmtDuration, fmtLiters, fmtNum, fmtPct, fmtShortDate, fmtVolume, median,
   startOfDay, startOfWeek, weeksBetween,
@@ -351,6 +353,10 @@ export default function Overview() {
           </ul>
         </Card>
       </div>
+
+      <Card title="Achievements" hint="Hoe zeldzaam is elke achievement?">
+        <AchievementRarity all={achievementsFor(data)} userCount={data.users.length} />
+      </Card>
     </div>
   );
 }

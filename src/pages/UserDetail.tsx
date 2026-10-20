@@ -4,6 +4,8 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useData } from '../data';
 import { useAuth } from '../auth';
 import { useCachedImage } from '../imageCache';
+import { achievementsFor } from '../achievements';
+import { AchievementGrid } from '../components/achievements';
 import { addAdmin, adminErrorMessage, useAdmins } from '../admins';
 import { Avatar, Card, Empty, useChartProps } from '../components/ui';
 import { CalendarHeatmap } from '../components/charts';
@@ -39,6 +41,7 @@ export default function UserDetail() {
   const user = data!.usersById.get(uid);
   const isAdmin = !!admins?.some((a) => a.uid === uid);
   const bannerSrc = useCachedImage(user?.bannerUrl);
+  const achievements = useMemo(() => achievementsFor(data!).get(uid), [data, uid]);
 
   const makeAdmin = async () => {
     if (!user || !me) return;
@@ -130,11 +133,14 @@ export default function UserDetail() {
             <div><dt>Laatst ingelogd</dt><dd>{fmtRelative(user.lastLogin, now)}</dd></div>
             <div><dt>Laatste biertje</dt><dd>{fmtRelative(user.lastBeer, now)}</dd></div>
           </dl>
-          {admins && !isAdmin && (
-            <button className="btn sm" onClick={makeAdmin} disabled={adminBusy}>
-              {adminBusy ? 'Bezig…' : 'Maak beheerder'}
-            </button>
-          )}
+          <div className="profile-actions">
+            <Link className="btn sm" to={`/compare?u=${user.uid}`}>Vergelijken</Link>
+            {admins && !isAdmin && (
+              <button className="btn sm" onClick={makeAdmin} disabled={adminBusy}>
+                {adminBusy ? 'Bezig…' : 'Maak beheerder'}
+              </button>
+            )}
+          </div>
         </div>
         {adminError && <div className="banner error profile-banner-msg" role="alert">{adminError}</div>}
       </section>
@@ -149,6 +155,15 @@ export default function UserDetail() {
         <div><dt>Loginreeks</dt><dd>{user.loginStreak} d</dd></div>
         <div><dt>Proostjes ontvangen</dt><dd>{fmtNum(user.toastsReceived)}</dd></div>
       </dl>
+
+      {achievements && (
+        <Card
+          title="Achievements"
+          hint="Berekend met dezelfde regels als de app. ★ staat op het profiel van de gebruiker."
+        >
+          <AchievementGrid result={achievements} showcased={user.showcasedAchievements} />
+        </Card>
+      )}
 
       <Card
         title="Het afgelopen jaar"
@@ -237,12 +252,6 @@ export default function UserDetail() {
             <Pref label="Meldingen als vrienden in de buurt drinken" value={user.notifyNearbyCheckin} />
             <Pref label="Apparaat geregistreerd voor push" value={user.hasPushToken} />
             <Pref label="Introductie afgerond" value={user.hasSeenOnboarding} />
-            {user.showcasedAchievements.length > 0 && (
-              <div className="pref">
-                <span>Trofeeën op profiel</span>
-                <span className="muted small">{user.showcasedAchievements.join(', ')}</span>
-              </div>
-            )}
           </Card>
         </div>
       </div>

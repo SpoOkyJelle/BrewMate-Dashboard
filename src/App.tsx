@@ -2,8 +2,9 @@ import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-rou
 import { useAuth } from './auth';
 import { DataProvider, useData } from './data';
 import { fmtNum, fmtRelative } from './utils';
-import { IconChart, IconLogout, IconShield, IconUsers } from './components/icons';
+import { IconChart, IconCompare, IconLogout, IconShield, IconUsers } from './components/icons';
 import Admins from './pages/Admins';
+import Compare from './pages/Compare';
 import { Toasts } from './components/live';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/" element={<Overview />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:uid" element={<UserDetail />} />
+        <Route path="/compare" element={<Compare />} />
         <Route path="/admins" element={<Admins />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -72,6 +74,7 @@ function Layout() {
             <IconUsers /> <span>Gebruikers</span>
             {data && <span className="nav-count">{fmtNum(data.users.length)}</span>}
           </NavLink>
+          <NavLink to="/compare"><IconCompare /> <span>Vergelijken</span></NavLink>
           <NavLink to="/admins"><IconShield /> <span>Beheerders</span></NavLink>
         </nav>
         <div className="sidebar-foot">

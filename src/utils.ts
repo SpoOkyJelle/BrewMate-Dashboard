@@ -104,6 +104,8 @@ function readChartColors() {
     surface: v('--surface-2'),
     text: v('--text'),
     border: v('--line'),
+    /** Vaste kleur per gebruiker bij vergelijken. */
+    series: [v('--s1'), v('--s2'), v('--s3'), v('--s4')],
   };
 }
 
