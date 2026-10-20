@@ -8,6 +8,11 @@ Beheerdashboard voor de BrewMate-app. Leest live de Firestore-data van de app (`
   glasmaten, topdrinkers en een live activiteitenfeed.
 - **Gebruikers** – doorzoekbare en sorteerbare tabel met status (actief, nieuw, slapend…), CSV-export.
 - **Gebruikersdetail** – statistieken, jaarkalender, biertjes, vrienden en app-instellingen van één gebruiker.
+- **Behoud** – per aanmeldmaand welk deel van de gebruikers na 1, 2, … weken/maanden nog actief is.
+- **Kaart** – waar biertjes gelogd zijn (hittekaart of losse biertjes) en de populairste plekken.
+- **Netwerk** – vriendschappen als netwerk, met automatisch gevonden groepjes en drinkmaatjes.
+- **Vergelijken** – 2 tot 4 gebruikers naast elkaar.
+- **Berichten** – pushberichten sturen naar gebruikers (via een Cloud Function, zie hieronder).
 - **Beheerders** – beheerders toevoegen en verwijderen.
 
 Inloggen gaat met hetzelfde Firebase-account als in de app. Alleen beheerders komen binnen.
@@ -38,6 +43,31 @@ beheren. Gewone app-gebruikers mogen **nooit** in `admins` schrijven, anders kan
 beheerder maken.
 
 In [`firestore.rules.example`](firestore.rules.example) staan regels die dit afdwingen.
+
+## Pushberichten
+
+De pagina **Berichten** stuurt pushberichten via de Cloud Function `sendPush` (map `functions/`).
+Dat kan niet rechtstreeks vanuit de browser: Expo's push-dienst staat geen browserverzoeken toe,
+en zo blijven de push-tokens op de server. De functie:
+
+- controleert of de afzender in `admins` staat;
+- slaat gebruikers over die pushmeldingen hebben uitgezet (`notifyPushEnabled: false`);
+- verstuurt in groepjes van 100 via Expo en ruimt tokens op van apparaten die de app niet meer hebben;
+- schrijft elk verstuurd bericht naar de collectie `pushLog` (zichtbaar onder "Eerder verstuurd").
+
+Eenmalig uitrollen (het project moet op het Blaze-abonnement staan):
+
+```bash
+npm i -g firebase-tools
+firebase login
+cd functions && npm install && cd ..
+firebase deploy --only functions
+```
+
+Gebruik je in Expo "Enhanced push security"? Zet dan je Expo access token in `functions/.env`
+als `EXPO_ACCESS_TOKEN=...` voordat je uitrolt.
+
+Voeg ook de regel voor `pushLog` uit [`firestore.rules.example`](firestore.rules.example) toe.
 
 ## Caching
 

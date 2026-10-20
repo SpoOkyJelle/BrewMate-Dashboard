@@ -10,6 +10,9 @@ export interface Beer {
   date: Date | null;
   toasts: number;
   hasLocation: boolean;
+  /** GPS-locatie bij het loggen, als de gebruiker locatie deelt (± 100 m nauwkeurig). */
+  lat: number | null;
+  lng: number | null;
 }
 
 export interface UserStats {
@@ -78,7 +81,9 @@ function buildDataset(raw: Required<Raw>): Dataset {
     volume: Number(d.volume) || 0,
     date: toDate(d.timestamp),
     toasts: Array.isArray(d.toasts) ? d.toasts.length : 0,
-    hasLocation: typeof d.latitude === 'number',
+    hasLocation: typeof d.latitude === 'number' && typeof d.longitude === 'number',
+    lat: typeof d.latitude === 'number' ? d.latitude : null,
+    lng: typeof d.longitude === 'number' ? d.longitude : null,
   }));
   beers.sort((a, b) => (b.date?.getTime() ?? Number.MAX_SAFE_INTEGER) - (a.date?.getTime() ?? Number.MAX_SAFE_INTEGER));
 

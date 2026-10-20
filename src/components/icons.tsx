@@ -22,6 +22,18 @@ export const IconUserPlus = (p: P) => (
 export const IconCheers = (p: P) => (
   <svg {...base} {...p}><path d="m4 9 3.5-5 4 2.5-2 5.5a2.5 2.5 0 0 1-3.6 1.3L4.8 12.6A2.5 2.5 0 0 1 4 9z" /><path d="m20 9-3.5-5-4 2.5 2 5.5a2.5 2.5 0 0 0 3.6 1.3l1.1-.7A2.5 2.5 0 0 0 20 9z" /><path d="M7.5 14 6 20M16.5 14l1.5 6M4 20h4M16 20h4" /></svg>
 );
+export const IconNetwork = (p: P) => (
+  <svg {...base} {...p}><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="7" r="2.5" /><circle cx="12" cy="18" r="2.5" /><path d="M8.3 7.1 15.6 7M7.3 8.2l3.6 7.6M16.9 9.2l-3.7 6.7" /></svg>
+);
+export const IconRetention = (p: P) => (
+  <svg {...base} {...p}><path d="M3 5h18v4H3zM3 11h12v4H3zM3 17h6v3H3z" /></svg>
+);
+export const IconMessage = (p: P) => (
+  <svg {...base} {...p}><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>
+);
+export const IconMap = (p: P) => (
+  <svg {...base} {...p}><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.4" /></svg>
+);
 export const IconCompare = (p: P) => (
   <svg {...base} {...p}><path d="M8 3v18" /><path d="M16 3v18" /><path d="M3 8h5M3 14h5M16 10h5M16 16h5" /></svg>
 );

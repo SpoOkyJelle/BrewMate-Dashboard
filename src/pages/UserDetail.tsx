@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useData } from '../data';
@@ -16,6 +16,7 @@ import {
 } from '../utils';
 
 const WEEKS = 26;
+const UserMap = lazy(() => import('../components/UserMap'));
 const DAYS = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
 
 function Pref({ label, value }: { label: string; value: boolean | null }) {
@@ -135,6 +136,9 @@ export default function UserDetail() {
           </dl>
           <div className="profile-actions">
             <Link className="btn sm" to={`/compare?u=${user.uid}`}>Vergelijken</Link>
+            {user.hasPushToken && user.notifyPushEnabled !== false && (
+              <Link className="btn sm" to={`/messages?u=${user.uid}`}>Stuur bericht</Link>
+            )}
             {admins && !isAdmin && (
               <button className="btn sm" onClick={makeAdmin} disabled={adminBusy}>
                 {adminBusy ? 'Bezig…' : 'Maak beheerder'}
@@ -155,6 +159,18 @@ export default function UserDetail() {
         <div><dt>Loginreeks</dt><dd>{user.loginStreak} d</dd></div>
         <div><dt>Proostjes ontvangen</dt><dd>{fmtNum(user.toastsReceived)}</dd></div>
       </dl>
+
+      {beers.some((b) => b.hasLocation) && (
+        <Card
+          title="Waar gedronken"
+          hint={`${fmtNum(beers.filter((b) => b.hasLocation).length)} van ${fmtNum(beers.length)} biertjes met locatie`}
+          actions={<Link to={`/map?user=${user.uid}`} className="text-link">Grote kaart</Link>}
+        >
+          <Suspense fallback={<div className="map-wrap" style={{ height: 340 }} />}>
+            <UserMap beers={beers} />
+          </Suspense>
+        </Card>
+      )}
 
       {achievements && (
         <Card

@@ -2,7 +2,12 @@ import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-rou
 import { useAuth } from './auth';
 import { DataProvider, useData } from './data';
 import { fmtNum, fmtRelative } from './utils';
-import { IconChart, IconCompare, IconLogout, IconShield, IconUsers } from './components/icons';
+import { lazy, Suspense } from 'react';
+import {
+  IconChart, IconCompare, IconLogout, IconMap, IconMessage, IconNetwork, IconRetention, IconShield, IconUsers,
+} from './components/icons';
+import Retention from './pages/Retention';
+import Messages from './pages/Messages';
 import Admins from './pages/Admins';
 import Compare from './pages/Compare';
 import { Toasts } from './components/live';
@@ -10,6 +15,11 @@ import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Users from './pages/Users';
 import UserDetail from './pages/UserDetail';
+
+// De kaart (Leaflet) pas laden als iemand hem opent.
+const MapPage = lazy(() => import('./pages/MapPage'));
+const Network = lazy(() => import('./pages/Network'));
+const pageFallback = <div className="center-block"><div className="spinner" /></div>;
 
 export default function App() {
   return (
@@ -20,6 +30,10 @@ export default function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/users/:uid" element={<UserDetail />} />
         <Route path="/compare" element={<Compare />} />
+        <Route path="/map" element={<Suspense fallback={pageFallback}><MapPage /></Suspense>} />
+        <Route path="/network" element={<Suspense fallback={pageFallback}><Network /></Suspense>} />
+        <Route path="/retention" element={<Retention />} />
+        <Route path="/messages" element={<Messages />} />
         <Route path="/admins" element={<Admins />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -74,7 +88,11 @@ function Layout() {
             <IconUsers /> <span>Gebruikers</span>
             {data && <span className="nav-count">{fmtNum(data.users.length)}</span>}
           </NavLink>
+          <NavLink to="/retention"><IconRetention /> <span>Behoud</span></NavLink>
+          <NavLink to="/map"><IconMap /> <span>Kaart</span></NavLink>
+          <NavLink to="/network"><IconNetwork /> <span>Netwerk</span></NavLink>
           <NavLink to="/compare"><IconCompare /> <span>Vergelijken</span></NavLink>
+          <NavLink to="/messages"><IconMessage /> <span>Berichten</span></NavLink>
           <NavLink to="/admins"><IconShield /> <span>Beheerders</span></NavLink>
         </nav>
         <div className="sidebar-foot">
