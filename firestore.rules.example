@@ -1,0 +1,39 @@
+// Example Firestore rules that let dashboard admins read everything.
+// Merge this into your project's rules (Firebase console → Firestore → Rules).
+// It does NOT replace the per-user rules your app needs — keep those and add the `|| isAdmin()` parts.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Admin list: a user may only check their own entry. Nobody can write it from a client;
+    // add admins by hand in the Firebase console.
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Example: keep your existing app rules and add `|| isAdmin()` to the read rules.
+    match /users/{uid} {
+      allow read: if signedIn();                       // app needs this for friends/search
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+    match /beers/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if signedIn();                     // toasts are added by friends
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+    match /friends/{id} {
+      allow read, write: if signedIn();
+    }
+    match /friendRequests/{id} {
+      allow read, write: if signedIn();
+    }
+  }
+}
