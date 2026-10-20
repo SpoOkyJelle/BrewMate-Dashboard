@@ -2,7 +2,8 @@ import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-rou
 import { useAuth } from './auth';
 import { DataProvider, useData } from './data';
 import { fmtNum, fmtRelative } from './utils';
-import { IconChart, IconLogout, IconUsers } from './components/icons';
+import { IconChart, IconLogout, IconShield, IconUsers } from './components/icons';
+import Admins from './pages/Admins';
 import { Toasts } from './components/live';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/" element={<Overview />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:uid" element={<UserDetail />} />
+        <Route path="/admins" element={<Admins />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -66,6 +68,7 @@ function Layout() {
             <IconUsers /> <span>Gebruikers</span>
             {data && <span className="nav-count">{fmtNum(data.users.length)}</span>}
           </NavLink>
+          <NavLink to="/admins"><IconShield /> <span>Beheerders</span></NavLink>
         </nav>
         <div className="sidebar-foot">
           <LiveBadge />

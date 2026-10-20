@@ -1,6 +1,6 @@
-// Example Firestore rules that let dashboard admins read everything.
+// Example Firestore rules for the BrewMate dashboard.
 // Merge this into your project's rules (Firebase console → Firestore → Rules).
-// It does NOT replace the per-user rules your app needs — keep those and add the `|| isAdmin()` parts.
+// It does NOT replace the per-user rules your app needs — keep those and add the admin parts.
 
 rules_version = '2';
 service cloud.firestore {
@@ -11,14 +11,20 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Admin list: a user may only check their own entry. Nobody can write it from a client;
-    // add admins by hand in the Firebase console.
+    // Admin list.
+    // - Everyone may check their own entry (needed to see "you are not an admin").
+    // - Admins may see the full list and add or remove other admins.
+    // - Nobody can remove themselves, so there is always at least one admin left.
+    // - Regular app users can never write here, so they cannot make themselves admin.
     match /admins/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
-      allow write: if false;
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isAdmin()
+        && request.resource.data.addedByUid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isAdmin() && request.auth.uid != uid;
     }
 
-    // Example: keep your existing app rules and add `|| isAdmin()` to the read rules.
+    // Example: keep your existing app rules and make sure admins can read everything.
     match /users/{uid} {
       allow read: if signedIn();                       // app needs this for friends/search
       allow write: if signedIn() && request.auth.uid == uid;

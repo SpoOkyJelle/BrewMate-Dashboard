@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 export type AuthStatus = 'loading' | 'signedOut' | 'notAdmin' | 'admin';
@@ -17,30 +17,35 @@ const AuthContext = createContext<AuthState>({
   logout: async () => {},
 });
 
-// A signed-in user is an admin when a document exists at admins/{uid}.
-async function checkAdmin(uid: string): Promise<boolean> {
-  try {
-    const snap = await getDoc(doc(db, 'admins', uid));
-    return snap.exists();
-  } catch {
-    return false;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (u) => {
+    let stopAdminWatch: (() => void) | null = null;
+
+    const stopAuth = onAuthStateChanged(auth, (u) => {
+      stopAdminWatch?.();
+      stopAdminWatch = null;
       setUser(u);
       if (!u) {
         setStatus('signedOut');
         return;
       }
       setStatus('loading');
-      setStatus((await checkAdmin(u.uid)) ? 'admin' : 'notAdmin');
+      // Live: een ingelogde gebruiker is admin zolang admins/{uid} bestaat.
+      // Wordt iemand als admin verwijderd, dan verliest die direct de toegang.
+      stopAdminWatch = onSnapshot(
+        doc(db, 'admins', u.uid),
+        (snap) => setStatus(snap.exists() ? 'admin' : 'notAdmin'),
+        () => setStatus('notAdmin'),
+      );
     });
+
+    return () => {
+      stopAdminWatch?.();
+      stopAuth();
+    };
   }, []);
 
   return (

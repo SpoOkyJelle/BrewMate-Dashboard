@@ -574,6 +574,42 @@ input:focus { outline: none; border-color: var(--amber); box-shadow: 0 0 0 3px v
 .pill.on { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
 .pill.off { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
 
+.profile-name { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.profile-name .status { font-family: var(--font-body); letter-spacing: 0; }
+.profile-banner-msg { margin: 0 24px 20px; }
+
+/* ---------- Beheerders ---------- */
+.page.narrow { max-width: 860px; }
+.block { display: block; }
+.btn.sm { padding: 6px 11px; font-size: 13px; border-radius: 9px; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--danger); }
+.s-admin { background: var(--amber-soft); color: var(--amber-ink); }
+
+.banner {
+  padding: 11px 14px;
+  border-radius: 12px;
+  font-weight: 600;
+  animation: route-in 0.3s var(--ease-out);
+}
+.banner.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.banner.error { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+
+.search.wide { max-width: none; margin-bottom: 4px; }
+.pick-list { margin-top: 8px; }
+.pick-list li { animation: route-in 0.25s var(--ease-out); }
+.pick-empty { padding: 12px 2px 2px; }
+
+.admin-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 16px; padding: 12px 0; }
+.admin-list .lb-name { display: inline-flex; align-items: center; gap: 8px; }
+.admin-meta { text-align: right; }
+.admin-action { justify-self: end; }
+.admin-action.confirm { display: inline-flex; gap: 6px; }
+@media (max-width: 640px) {
+  .admin-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .admin-meta { grid-column: 1 / -1; grid-row: 2; text-align: left; padding-left: 50px; }
+}
+
 /* ---------- Inloggen ---------- */
 .login {
   min-height: 100vh;

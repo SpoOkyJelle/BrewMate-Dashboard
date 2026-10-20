@@ -1,49 +1,47 @@
 # BrewMate Dashboard
 
-Admin dashboard for the BrewMate app. It reads the app's Firestore data (`users`, `beers`,
-`friends`, `friendRequests`) and shows statistics for all users.
+Beheerdashboard voor de BrewMate-app. Leest live de Firestore-data van de app (`users`, `beers`,
+`friends`, `friendRequests`) en toont statistieken van alle gebruikers.
 
-- **Overview** – total/new/active users, beers logged, volume, friendships, beers per day,
-  user growth, glass sizes, drinking by hour and weekday, top drinkers, newest users.
-- **Users** – searchable, sortable table of every user (beers, volume, streaks, friends,
-  last seen). Filter on active / inactive / never logged. Export to CSV.
-- **User detail** – one user's stats, beers per week, glass sizes, recent beers, friends and
-  notification settings.
+- **Overzicht** – live gebruikersteller, biertjes en drinkers van vandaag, trends t.o.v. vorige week,
+  biertjes per dag, wanneer er gedronken wordt, trechter van aanmelding tot vaste drinker, groei,
+  glasmaten, topdrinkers en een live activiteitenfeed.
+- **Gebruikers** – doorzoekbare en sorteerbare tabel met status (actief, nieuw, slapend…), CSV-export.
+- **Gebruikersdetail** – statistieken, jaarkalender, biertjes, vrienden en app-instellingen van één gebruiker.
+- **Beheerders** – beheerders toevoegen en verwijderen.
 
-Login uses the same Firebase Auth accounts as the app. Only admins can get in.
+Inloggen gaat met hetzelfde Firebase-account als in de app. Alleen beheerders komen binnen.
 
-## Setup
+## Starten
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
 ```
 
-### 1. Make yourself an admin
+## Beheerders
 
-1. Open the [Firebase console](https://console.firebase.google.com/project/brewmate-863cd/firestore) → Firestore.
-2. Find your user ID (Authentication tab, or the `users` collection).
-3. Create a collection `admins` with a document whose **ID is your user ID**. The document can
-   be empty (add any field, e.g. `name: "Jelle"`, if the console requires one).
-4. Sign in to the dashboard with your normal BrewMate email and password.
+Een account is beheerder zolang er een document `admins/{uid}` bestaat.
 
-If you sign in with an account that is not in `admins`, the dashboard shows your user ID and
-tells you which document to create.
+- **Eerste beheerder:** maak in de [Firebase-console](https://console.firebase.google.com/project/brewmate-863cd/firestore)
+  de collectie `admins` aan met een document waarvan de **ID je user-ID** is (een veld zoals `name` is genoeg).
+- **Daarna:** voeg beheerders toe via de pagina **Beheerders** in het dashboard, of met de knop
+  **Maak beheerder** op de pagina van een gebruiker. De persoon moet al een BrewMate-account hebben.
+- Je kunt jezelf niet verwijderen, zodat er altijd minstens één beheerder overblijft.
+- Wie als beheerder verwijderd wordt, verliest direct de toegang (ook als het dashboard open staat).
 
-### 2. Firestore rules
+## Firestore-regels
 
-The dashboard reads directly from Firestore in the browser, so your Firestore rules decide
-what it can see. Signed-in admins need **read** access to `users`, `beers`, `friends`,
-`friendRequests`, and to their own `admins/{uid}` document.
+Het dashboard leest en schrijft rechtstreeks vanuit de browser, dus de Firestore-regels bepalen wat
+mag. Beheerders moeten alle collecties kunnen lezen, en de collectie `admins` kunnen lezen en
+beheren. Gewone app-gebruikers mogen **nooit** in `admins` schrijven, anders kan iedereen zichzelf
+beheerder maken.
 
-> ⚠️ The admin check is only as strong as your rules. Make sure clients **cannot write** to
-> the `admins` collection, otherwise any app user could make themselves admin.
+In [`firestore.rules.example`](firestore.rules.example) staan regels die dit afdwingen.
 
-See [`firestore.rules.example`](firestore.rules.example) for a starting point.
+## Online zetten
 
-## Deploy
-
-`npm run build` creates a static site in `dist/`. Host it anywhere, for example Firebase Hosting:
+`npm run build` maakt een statische site in `dist/`. Bijvoorbeeld met Firebase Hosting:
 
 ```bash
 npm i -g firebase-tools
@@ -52,9 +50,8 @@ firebase init hosting   # project: brewmate-863cd, public dir: dist, single-page
 npm run build && firebase deploy --only hosting
 ```
 
-## Notes
+## Opmerkingen
 
-- All data is loaded once when you open the dashboard (press **Refresh** to reload). This is
-  fine for thousands of users/beers; for much larger data sets, move the aggregation to a
-  Cloud Function or scheduled job.
-- Dates are shown in your browser's time zone.
+- De data komt live binnen via Firestore-listeners; dat is prima voor duizenden gebruikers/biertjes.
+  Bij veel grotere aantallen is het beter de berekeningen naar een Cloud Function te verplaatsen.
+- Tijden worden getoond in de tijdzone van je browser.

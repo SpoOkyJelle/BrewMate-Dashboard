@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useData } from '../data';
+import { useAuth } from '../auth';
+import { addAdmin, adminErrorMessage, useAdmins } from '../admins';
 import { Avatar, Card, Empty, useChartProps } from '../components/ui';
 import { CalendarHeatmap } from '../components/charts';
 import { IconArrowLeft, IconCopy } from '../components/icons';
@@ -29,7 +31,25 @@ export default function UserDetail() {
   const { data, now, events } = useData();
   const chart = useChartProps();
   const [copied, setCopied] = useState(false);
+  const { user: me } = useAuth();
+  const { admins } = useAdmins();
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
   const user = data!.usersById.get(uid);
+  const isAdmin = !!admins?.some((a) => a.uid === uid);
+
+  const makeAdmin = async () => {
+    if (!user || !me) return;
+    setAdminBusy(true);
+    setAdminError(null);
+    try {
+      await addAdmin(user, me);
+    } catch (err) {
+      setAdminError(adminErrorMessage(err));
+    } finally {
+      setAdminBusy(false);
+    }
+  };
 
   const beers = useMemo(() => data!.beers.filter((b) => b.userId === uid), [data, uid]);
   const freshBeerIds = useMemo(() => new Set(events.filter((e) => e.kind === 'beer').map((e) => e.docId)), [events]);
@@ -93,7 +113,10 @@ export default function UserDetail() {
         <div className="profile-body">
           <Avatar url={user.photoUrl} name={displayName(user)} size={88} />
           <div className="profile-info">
-            <h1>{user.username || 'Geen gebruikersnaam'}</h1>
+            <h1 className="profile-name">
+              {user.username || 'Geen gebruikersnaam'}
+              {isAdmin && <Link to="/admins" className="status s-admin">Beheerder</Link>}
+            </h1>
             <div className="muted">{user.email}</div>
             <button className="uid" onClick={copyUid} title="Kopieer gebruikers-ID">
               <code>{user.uid}</code> <IconCopy width={14} height={14} /> <span>{copied ? 'Gekopieerd' : ''}</span>
@@ -104,7 +127,13 @@ export default function UserDetail() {
             <div><dt>Laatst ingelogd</dt><dd>{fmtRelative(user.lastLogin, now)}</dd></div>
             <div><dt>Laatste biertje</dt><dd>{fmtRelative(user.lastBeer, now)}</dd></div>
           </dl>
+          {admins && !isAdmin && (
+            <button className="btn sm" onClick={makeAdmin} disabled={adminBusy}>
+              {adminBusy ? 'Bezig…' : 'Maak beheerder'}
+            </button>
+          )}
         </div>
+        {adminError && <div className="banner error profile-banner-msg" role="alert">{adminError}</div>}
       </section>
 
       <dl className="facts">
