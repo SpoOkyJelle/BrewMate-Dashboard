@@ -39,6 +39,27 @@ beheerder maken.
 
 In [`firestore.rules.example`](firestore.rules.example) staan regels die dit afdwingen.
 
+## Caching
+
+- **Data:** Firestore bewaart opgehaalde documenten in de browser (IndexedDB). Het dashboard opent
+  direct met de laatst bekende cijfers ("Bijwerken…") en haalt daarna alleen wijzigingen op ("Live").
+- **Foto's:** profielfoto's en banners worden na één keer laden bewaard in de Cache Storage van de
+  browser en daarna direct getoond, ook als Firebase Storage even niet bereikbaar is.
+- Bij **uitloggen** worden beide caches gewist.
+
+De fotocache werkt pas als de Storage-bucket CORS toestaat. Eenmalig instellen via
+[Cloud Shell](https://console.cloud.google.com/?cloudshell=true&project=brewmate-863cd):
+
+```bash
+cat > cors.json <<'JSON'
+[{"origin":["*"],"method":["GET","HEAD"],"responseHeader":["Content-Type","ETag"],"maxAgeSeconds":3600}]
+JSON
+gcloud storage buckets update gs://brewmate-863cd.firebasestorage.app --cors-file=cors.json
+```
+
+(Dezelfde instelling staat in [`storage-cors.json`](storage-cors.json).) Zonder deze stap worden de
+foto's gewoon direct geladen, alleen zonder eigen cache.
+
 ## Online zetten
 
 `npm run build` maakt een statische site in `dist/`. Bijvoorbeeld met Firebase Hosting:

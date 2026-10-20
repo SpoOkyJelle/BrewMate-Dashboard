@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { collection, onSnapshot, type DocumentData } from 'firebase/firestore';
 import { db } from './firebase';
+import { pruneImageCache } from './imageCache';
 
 export interface Beer {
   id: string;
@@ -144,7 +145,8 @@ function buildDataset(raw: Required<Raw>): Dataset {
   return { users, usersById, beers, friendshipCount: pairs.size, pendingRequests };
 }
 
-export type LiveStatus = 'connecting' | 'live' | 'error';
+/** cached = data komt (nog) uit de lokale cache, de server is nog niet bijgewerkt of je bent offline. */
+export type LiveStatus = 'connecting' | 'cached' | 'live' | 'error';
 
 interface DataState {
   data: Dataset | null;
@@ -166,6 +168,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<LiveEvent[]>([]);
   const [lastChange, setLastChange] = useState<Date | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [fromCache, setFromCache] = useState<Partial<Record<Coll, boolean>>>({});
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 15_000);
@@ -174,20 +177,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubs = COLLECTIONS.map((name) => {
-      let first = true;
+      let loaded = false;
+      // Pas na de eerste snapshot van de server weten we wat "nieuw" is. Wat tussen
+      // het vorige bezoek (de cache) en nu veranderde, telt niet als live-melding.
+      let baseline = false;
       return onSnapshot(
         collection(db, name),
+        { includeMetadataChanges: true },
         (snap) => {
-          setRaw((r) => ({ ...r, [name]: snap.docs.map((doc) => ({ id: doc.id, d: doc.data() })) }));
-          setLastChange(new Date());
-          setNow(new Date());
-          if (first) {
-            first = false;
+          setFromCache((f) => (f[name] === snap.metadata.fromCache ? f : { ...f, [name]: snap.metadata.fromCache }));
+          const changes = snap.docChanges();
+          if (!loaded || changes.length) {
+            loaded = true;
+            setRaw((r) => ({ ...r, [name]: snap.docs.map((doc) => ({ id: doc.id, d: doc.data() })) }));
+            setLastChange(new Date());
+            setNow(new Date());
+          }
+          if (!baseline) {
+            if (!snap.metadata.fromCache) baseline = true;
             return;
           }
+          if (!changes.length) return;
           const at = new Date();
           const fresh: LiveEvent[] = [];
-          snap.docChanges().forEach((ch) => {
+          changes.forEach((ch) => {
             const d = ch.doc.data();
             const id = ch.doc.id;
             if (name === 'beers' && ch.type === 'added') {
@@ -214,7 +227,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [raw],
   );
 
-  const status: LiveStatus = error ? 'error' : data ? 'live' : 'connecting';
+  // Kleine opruimactie: foto's van oude profielfoto-URL's uit de cache halen.
+  useEffect(() => {
+    if (!data || Object.values(fromCache).some(Boolean)) return;
+    const keep = new Set<string>();
+    data.users.forEach((u) => {
+      if (u.photoUrl) keep.add(u.photoUrl);
+      if (u.bannerUrl) keep.add(u.bannerUrl);
+    });
+    pruneImageCache(keep);
+  }, [data, fromCache]);
+
+  const status: LiveStatus = error
+    ? 'error'
+    : !data
+      ? 'connecting'
+      : COLLECTIONS.some((c) => fromCache[c] !== false)
+        ? 'cached'
+        : 'live';
 
   return (
     <DataContext.Provider value={{ data, status, error, events, lastChange, now }}>

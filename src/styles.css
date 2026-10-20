@@ -184,7 +184,9 @@ input:focus { outline: none; border-color: var(--amber); box-shadow: 0 0 0 3px v
   background: color-mix(in srgb, var(--ok) 14%, transparent);
   color: var(--ok);
 }
-.live-badge.connecting { background: var(--surface-2); color: var(--muted); }
+.live-badge.connecting, .live-badge.cached { background: var(--surface-2); color: var(--muted); }
+.avatar-fallback.loading { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.55; } }
 .live-badge.error { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 .live-dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .live-badge.live .live-dot::after {
@@ -544,11 +546,10 @@ input:focus { outline: none; border-color: var(--amber); box-shadow: 0 0 0 3px v
 .profile-banner {
   height: 120px;
   background:
+    var(--banner, none) center / cover no-repeat,
     radial-gradient(120% 140% at 0% 100%, color-mix(in srgb, var(--amber) 45%, transparent), transparent 60%),
     radial-gradient(100% 120% at 100% 0%, color-mix(in srgb, var(--hop) 30%, transparent), transparent 60%),
     var(--surface-2);
-  background-size: cover;
-  background-position: center;
 }
 .profile-body { display: flex; align-items: flex-end; gap: 20px; padding: 0 24px 20px; flex-wrap: wrap; }
 .profile-body > .avatar { margin-top: -44px; border: 4px solid var(--surface); box-sizing: content-box; }

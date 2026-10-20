@@ -1,7 +1,23 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { clearIndexedDbPersistence, doc, onSnapshot, terminate } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { clearImageCache } from './imageCache';
+
+/** Uitloggen én alle lokaal bewaarde gebruikersdata en foto's wissen. */
+async function logoutAndClear() {
+  await signOut(auth);
+  try {
+    await terminate(db);
+    await clearIndexedDbPersistence(db);
+  } catch {
+    // Lukt niet als een ander tabblad het dashboard nog open heeft. De cache blijft dan staan
+    // tot de volgende keer uitloggen met maar één tabblad open.
+  }
+  await clearImageCache();
+  // Firestore is na terminate() niet meer bruikbaar, dus start de app opnieuw.
+  window.location.assign('/login');
+}
 
 export type AuthStatus = 'loading' | 'signedOut' | 'notAdmin' | 'admin';
 
@@ -49,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ status, user, logout: () => signOut(auth) }}>
+    <AuthContext.Provider value={{ status, user, logout: logoutAndClear }}>
       {children}
     </AuthContext.Provider>
   );

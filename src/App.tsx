@@ -38,7 +38,11 @@ function RequireAdmin() {
 
 function LiveBadge() {
   const { status, lastChange, now } = useData();
-  const label = status === 'live' ? 'Live' : status === 'error' ? 'Geen verbinding' : 'Verbinden…';
+  const label =
+    status === 'live' ? 'Live'
+      : status === 'cached' ? 'Bijwerken…'
+        : status === 'error' ? 'Geen verbinding'
+          : 'Verbinden…';
   return (
     <div className={`live-badge ${status}`} title={lastChange ? `Laatste wijziging ${fmtRelative(lastChange, now)}` : ''}>
       <span className="live-dot" />

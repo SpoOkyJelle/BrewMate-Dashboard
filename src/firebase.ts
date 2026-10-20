@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
 // Same Firebase project as the BrewMate app. This web config is public by design;
 // access to the data is controlled by Firestore security rules.
@@ -16,4 +16,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Firestore bewaart opgehaalde documenten in IndexedDB. Het dashboard start daardoor direct met
+// de laatst bekende data, en bij opnieuw openen worden alleen gewijzigde documenten opgehaald.
+// Werkt ook met meerdere tabbladen tegelijk.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});

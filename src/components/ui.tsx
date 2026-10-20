@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { fmtNum, fmtPct, useChartColors } from '../utils';
+import { useCachedImage } from '../imageCache';
 
 export function Card({ title, hint, actions, children, className = '' }: {
   title?: ReactNode;
@@ -48,14 +49,19 @@ export function Segmented<T extends string | number>({ value, options, onChange,
 }
 
 export function Avatar({ url, name, size = 32 }: { url: string; name: string; size?: number }) {
-  const [broken, setBroken] = useState(false);
-  if (url && !broken) {
+  const src = useCachedImage(url);
+  const [broken, setBroken] = useState<string | null>(null);
+  if (src && broken !== src) {
     return (
-      <img className="avatar" src={url} alt="" width={size} height={size} loading="lazy" onError={() => setBroken(true)} />
+      <img className="avatar" src={src} alt="" width={size} height={size} decoding="async" onError={() => setBroken(src)} />
     );
   }
   return (
-    <span className="avatar avatar-fallback" style={{ width: size, height: size, fontSize: size * 0.42 }} aria-hidden>
+    <span
+      className={src === undefined && url ? 'avatar avatar-fallback loading' : 'avatar avatar-fallback'}
+      style={{ width: size, height: size, fontSize: size * 0.42 }}
+      aria-hidden
+    >
       {(name[0] ?? '?').toUpperCase()}
     </span>
   );

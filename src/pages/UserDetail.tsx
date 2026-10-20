@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useData } from '../data';
 import { useAuth } from '../auth';
+import { useCachedImage } from '../imageCache';
 import { addAdmin, adminErrorMessage, useAdmins } from '../admins';
 import { Avatar, Card, Empty, useChartProps } from '../components/ui';
 import { CalendarHeatmap } from '../components/charts';
@@ -37,6 +38,7 @@ export default function UserDetail() {
   const [adminError, setAdminError] = useState<string | null>(null);
   const user = data!.usersById.get(uid);
   const isAdmin = !!admins?.some((a) => a.uid === uid);
+  const bannerSrc = useCachedImage(user?.bannerUrl);
 
   const makeAdmin = async () => {
     if (!user || !me) return;
@@ -109,7 +111,8 @@ export default function UserDetail() {
       <Link to="/users" className="back"><IconArrowLeft /> Gebruikers</Link>
 
       <section className="profile">
-        <div className="profile-banner" style={user.bannerUrl ? { backgroundImage: `url("${user.bannerUrl}")` } : undefined} />
+        {/* De foto ligt over het verloop; laadt hij niet, dan blijft het verloop zichtbaar. */}
+        <div className="profile-banner" style={bannerSrc ? { ['--banner' as string]: `url("${bannerSrc}")` } : undefined} />
         <div className="profile-body">
           <Avatar url={user.photoUrl} name={displayName(user)} size={88} />
           <div className="profile-info">
