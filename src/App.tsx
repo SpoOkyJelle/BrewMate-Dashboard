@@ -1,7 +1,9 @@
-import { Navigate, NavLink, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth';
 import { DataProvider, useData } from './data';
-import { fmtRelative } from './utils';
+import { fmtNum, fmtRelative } from './utils';
+import { IconChart, IconLogout, IconUsers } from './components/icons';
+import { Toasts } from './components/live';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Users from './pages/Users';
@@ -32,50 +34,81 @@ function RequireAdmin() {
   );
 }
 
+function LiveBadge() {
+  const { status, lastChange, now } = useData();
+  const label = status === 'live' ? 'Live' : status === 'error' ? 'Geen verbinding' : 'Verbinden…';
+  return (
+    <div className={`live-badge ${status}`} title={lastChange ? `Laatste wijziging ${fmtRelative(lastChange, now)}` : ''}>
+      <span className="live-dot" />
+      {label}
+    </div>
+  );
+}
+
 function Layout() {
   const { user, logout } = useAuth();
-  const { data, loading, error, refresh } = useData();
+  const { data, error } = useData();
+  const location = useLocation();
 
   return (
     <div className="shell">
-      <header className="topbar">
+      <aside className="sidebar">
         <div className="brand">
-          <img src="/favicon.svg" alt="" width={28} height={28} />
-          <span>BrewMate <em>Admin</em></span>
+          <img src="/favicon.svg" alt="" width={30} height={30} />
+          <div>
+            <div className="brand-name">BrewMate</div>
+            <div className="brand-sub">Beheer</div>
+          </div>
         </div>
-        <nav className="nav">
-          <NavLink to="/" end>Overview</NavLink>
-          <NavLink to="/users">Users</NavLink>
+        <nav className="nav" aria-label="Hoofdmenu">
+          <NavLink to="/" end><IconChart /> <span>Overzicht</span></NavLink>
+          <NavLink to="/users">
+            <IconUsers /> <span>Gebruikers</span>
+            {data && <span className="nav-count">{fmtNum(data.users.length)}</span>}
+          </NavLink>
         </nav>
-        <div className="topbar-right">
-          <span className="muted small hide-sm">
-            {loading ? 'Loading…' : data ? `Updated ${fmtRelative(data.loadedAt)}` : ''}
-          </span>
-          <button className="btn ghost" onClick={refresh} disabled={loading} title="Reload data">
-            ↻<span className="hide-sm"> Refresh</span>
-          </button>
-          <button className="btn ghost" onClick={logout} title={user?.email ?? ''}>
-            Sign out
-          </button>
+        <div className="sidebar-foot">
+          <LiveBadge />
+          <div className="account">
+            <span className="account-email" title={user?.email ?? ''}>{user?.email}</span>
+            <button className="icon-btn" onClick={logout} title="Uitloggen" aria-label="Uitloggen">
+              <IconLogout />
+            </button>
+          </div>
         </div>
-      </header>
+      </aside>
+
       <main className="content">
         {error ? (
-          <div className="card error-card">
-            <h3>Could not load data</h3>
+          <div className="panel error-panel">
+            <h2>Kan de data niet laden</h2>
             <p className="muted">{error}</p>
             <p className="muted small">
-              If this says “Missing or insufficient permissions”, your Firestore rules don’t allow admins to read all
-              collections yet. See the README for the rules to add.
+              Staat er “Missing or insufficient permissions”? Dan staan je Firestore-regels nog niet toe dat admins alle
+              collecties lezen. In de README staat welke regels je moet toevoegen.
             </p>
-            <button className="btn" onClick={refresh}>Try again</button>
           </div>
         ) : !data ? (
-          <div className="center-block"><div className="spinner" /></div>
+          <Skeleton />
         ) : (
-          <Outlet />
+          <div key={location.pathname} className="route">
+            <Outlet />
+          </div>
         )}
       </main>
+      <Toasts />
+    </div>
+  );
+}
+
+function Skeleton() {
+  return (
+    <div className="page" aria-busy="true" aria-label="Laden">
+      <div className="sk sk-hero" />
+      <div className="sk-row">
+        {[0, 1, 2, 3].map((i) => <div key={i} className="sk sk-tile" />)}
+      </div>
+      <div className="sk sk-chart" />
     </div>
   );
 }

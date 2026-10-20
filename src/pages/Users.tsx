@@ -1,22 +1,39 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData, type UserStats } from '../data';
-import { Avatar, Card, Segmented } from '../components/ui';
+import { Avatar, Card } from '../components/ui';
+import { IconDownload, IconSearch } from '../components/icons';
 import { addDays, displayName, fmtDate, fmtLiters, fmtNum, fmtRelative, startOfDay } from '../utils';
 
 type SortKey = 'name' | 'createdAt' | 'lastLogin' | 'beerCount' | 'totalCl' | 'lastBeer' | 'currentStreak' | 'friends';
-type Filter = 'all' | 'active' | 'inactive' | 'never';
+type Filter = 'all' | 'active' | 'inactive' | 'never' | 'new';
+type Status = 'drinking' | 'active' | 'new' | 'inactive' | 'never';
 
 const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
-  { key: 'name', label: 'User' },
-  { key: 'createdAt', label: 'Joined' },
-  { key: 'lastLogin', label: 'Last seen' },
-  { key: 'beerCount', label: 'Beers', numeric: true },
+  { key: 'name', label: 'Gebruiker' },
+  { key: 'lastBeer', label: 'Laatste biertje' },
+  { key: 'beerCount', label: 'Biertjes', numeric: true },
   { key: 'totalCl', label: 'Volume', numeric: true },
-  { key: 'lastBeer', label: 'Last beer' },
-  { key: 'currentStreak', label: 'Streak', numeric: true },
-  { key: 'friends', label: 'Friends', numeric: true },
+  { key: 'currentStreak', label: 'Reeks', numeric: true },
+  { key: 'friends', label: 'Vrienden', numeric: true },
+  { key: 'createdAt', label: 'Lid sinds' },
+  { key: 'lastLogin', label: 'Laatst ingelogd' },
 ];
+
+const STATUS_LABEL: Record<Status, string> = {
+  drinking: 'Drinkt nu',
+  active: 'Actief',
+  new: 'Nieuw',
+  inactive: 'Slapend',
+  never: 'Nooit gelogd',
+};
+
+function statusOf(u: UserStats, now: Date): Status {
+  if (u.lastBeer && now.getTime() - u.lastBeer.getTime() < 3_600_000) return 'drinking';
+  if (u.lastBeer && u.lastBeer >= addDays(startOfDay(now), -29)) return 'active';
+  if (u.createdAt && u.createdAt >= addDays(startOfDay(now), -6)) return 'new';
+  return u.beerCount ? 'inactive' : 'never';
+}
 
 function sortValue(u: UserStats, key: SortKey): number | string {
   switch (key) {
@@ -30,121 +47,174 @@ function sortValue(u: UserStats, key: SortKey): number | string {
 }
 
 function toCsv(users: UserStats[]): string {
-  const header = ['uid', 'username', 'email', 'joined', 'last_login', 'beers', 'liters', 'last_beer', 'current_streak', 'longest_streak', 'friends'];
+  const header = ['uid', 'gebruikersnaam', 'email', 'lid_sinds', 'laatst_ingelogd', 'biertjes', 'liters', 'laatste_biertje', 'reeks', 'langste_reeks', 'vrienden'];
   const esc = (v: unknown) => {
     const s = v == null ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const rows = users.map((u) => [
     u.uid, u.username, u.email, u.createdAt?.toISOString(), u.lastLogin?.toISOString(), u.beerCount,
-    (u.totalCl / 100).toFixed(2), u.lastBeer?.toISOString(), u.currentStreak, u.longestStreak, u.friendIds.length,
+    (u.totalCl / 100).toFixed(2).replace('.', ','), u.lastBeer?.toISOString(), u.currentStreak, u.longestStreak, u.friendIds.length,
   ]);
-  return [header, ...rows].map((r) => r.map(esc).join(',')).join('\n');
+  // Puntkomma, zodat Nederlandse Excel het direct goed opent.
+  return '﻿' + [header, ...rows].map((r) => r.map(esc).join(';')).join('\n');
 }
 
 export default function Users() {
-  const { data } = useData();
+  const { data, now, events } = useData();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'createdAt', desc: true });
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'lastBeer', desc: true });
+
+  const freshUids = useMemo(() => new Set(events.filter((e) => e.kind === 'signup').map((e) => e.uid)), [events]);
+
+  const withStatus = useMemo(() => data!.users.map((u) => ({ u, status: statusOf(u, now) })), [data, now]);
+
+  const counts = useMemo(() => {
+    const c = { all: withStatus.length, active: 0, inactive: 0, never: 0, new: 0 };
+    withStatus.forEach(({ status }) => {
+      if (status === 'drinking' || status === 'active') c.active++;
+      else c[status]++;
+    });
+    return c;
+  }, [withStatus]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const d30 = addDays(startOfDay(new Date()), -29);
-    const list = data!.users.filter((u) => {
+    const list = withStatus.filter(({ u, status }) => {
       if (q && !`${u.username} ${u.email} ${u.uid}`.toLowerCase().includes(q)) return false;
-      if (filter === 'active') return !!u.lastBeer && u.lastBeer >= d30;
-      if (filter === 'inactive') return !!u.lastBeer && u.lastBeer < d30;
-      if (filter === 'never') return u.beerCount === 0;
+      if (filter === 'active') return status === 'active' || status === 'drinking';
+      if (filter !== 'all') return status === filter;
       return true;
     });
     const dir = sort.desc ? -1 : 1;
     return list.sort((a, b) => {
-      const va = sortValue(a, sort.key);
-      const vb = sortValue(b, sort.key);
+      const va = sortValue(a.u, sort.key);
+      const vb = sortValue(b.u, sort.key);
       return va < vb ? -dir : va > vb ? dir : 0;
     });
-  }, [data, query, filter, sort]);
+  }, [withStatus, query, filter, sort]);
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== 'name' }));
 
   const exportCsv = () => {
-    const blob = new Blob([toCsv(rows)], { type: 'text/csv' });
+    const blob = new Blob([toCsv(rows.map((r) => r.u))], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `brewmate-users-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `brewmate-gebruikers-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
 
+  const filters: { value: Filter; label: string }[] = [
+    { value: 'all', label: 'Iedereen' },
+    { value: 'active', label: 'Actief' },
+    { value: 'new', label: 'Nieuw' },
+    { value: 'inactive', label: 'Slapend' },
+    { value: 'never', label: 'Nooit gelogd' },
+  ];
+
   return (
     <div className="page">
-      <div className="page-head">
-        <h1>Users <span className="muted">({fmtNum(rows.length)})</span></h1>
+      <header className="page-head">
+        <div>
+          <h1>Gebruikers</h1>
+          <p className="muted">
+            Actief betekent een biertje gelogd in de laatste 30 dagen. Slapend: langer geleden.
+          </p>
+        </div>
+        <button className="btn" onClick={exportCsv}><IconDownload /> Exporteren als CSV</button>
+      </header>
+
+      <div className="chips" role="radiogroup" aria-label="Filter">
+        {filters.map((f) => (
+          <button
+            key={f.value}
+            role="radio"
+            aria-checked={filter === f.value}
+            className={filter === f.value ? 'chip active' : 'chip'}
+            onClick={() => setFilter(f.value)}
+          >
+            {f.label} <span className="chip-count">{fmtNum(counts[f.value])}</span>
+          </button>
+        ))}
       </div>
 
       <Card>
-        <div className="toolbar">
+        <label className="search">
+          <IconSearch />
           <input
-            className="search"
             type="search"
-            placeholder="Search name, email or UID…"
+            placeholder="Zoek op naam, e-mail of UID"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="Zoek gebruikers"
           />
-          <Segmented
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: 'all', label: 'All' },
-              { value: 'active', label: 'Active 30d' },
-              { value: 'inactive', label: 'Inactive' },
-              { value: 'never', label: 'Never logged' },
-            ]}
-          />
-          <button className="btn ghost" onClick={exportCsv}>Export CSV</button>
-        </div>
+          {query && <span className="muted small">{fmtNum(rows.length)} gevonden</span>}
+        </label>
 
         <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
                 {COLUMNS.map((c) => (
-                  <th key={c.key} className={c.numeric ? 'num' : ''} onClick={() => toggleSort(c.key)}>
-                    {c.label}
-                    {sort.key === c.key && <span className="sort">{sort.desc ? ' ↓' : ' ↑'}</span>}
+                  <th
+                    key={c.key}
+                    className={c.numeric ? 'num' : ''}
+                    aria-sort={sort.key === c.key ? (sort.desc ? 'descending' : 'ascending') : 'none'}
+                  >
+                    <button onClick={() => toggleSort(c.key)}>
+                      {c.numeric && <span className="sort" aria-hidden>{sort.key === c.key ? (sort.desc ? '↓' : '↑') : ''}</span>}
+                      {c.label}
+                      {!c.numeric && <span className="sort" aria-hidden>{sort.key === c.key ? (sort.desc ? '↓' : '↑') : ''}</span>}
+                    </button>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((u) => (
-                <tr key={u.uid} onClick={() => navigate(`/users/${u.uid}`)}>
+              {rows.map(({ u, status }) => (
+                <tr
+                  key={u.uid}
+                  className={freshUids.has(u.uid) ? 'fresh' : ''}
+                  onClick={() => navigate(`/users/${u.uid}`)}
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/users/${u.uid}`)}
+                >
                   <td>
                     <div className="user-cell">
-                      <Avatar url={u.photoUrl} name={displayName(u)} />
-                      <div>
-                        <div>{u.username || <span className="muted">(no username)</span>}</div>
+                      <span className="avatar-wrap">
+                        <Avatar url={u.photoUrl} name={displayName(u)} size={34} />
+                        {status === 'drinking' && <span className="avatar-dot" title="Biertje in het afgelopen uur" />}
+                      </span>
+                      <div className="user-text">
+                        <div className="user-name">
+                          {u.username || <span className="muted">Geen gebruikersnaam</span>}
+                          <span className={`status s-${status}`}>{STATUS_LABEL[status]}</span>
+                        </div>
                         <div className="muted small">{u.email}</div>
                       </div>
                     </div>
                   </td>
-                  <td title={fmtDate(u.createdAt)}>{fmtDate(u.createdAt)}</td>
-                  <td title={u.lastLogin?.toLocaleString()}>{fmtRelative(u.lastLogin)}</td>
-                  <td className="num">{fmtNum(u.beerCount)}</td>
+                  <td title={u.lastBeer?.toLocaleString('nl-NL')}>{fmtRelative(u.lastBeer, now)}</td>
+                  <td className="num strong">{fmtNum(u.beerCount)}</td>
                   <td className="num">{fmtLiters(u.totalCl)}</td>
-                  <td title={u.lastBeer?.toLocaleString()}>{fmtRelative(u.lastBeer)}</td>
                   <td className="num">
-                    {u.currentStreak} <span className="muted small">/ {u.longestStreak}</span>
+                    {u.currentStreak > 0 ? `${u.currentStreak} d` : '—'}
+                    <span className="muted small"> / {u.longestStreak}</span>
                   </td>
-                  <td className="num">{u.friendIds.length}</td>
+                  <td className="num">{u.friendIds.length || '—'}</td>
+                  <td>{fmtDate(u.createdAt)}</td>
+                  <td title={u.lastLogin?.toLocaleString('nl-NL')}>{fmtRelative(u.lastLogin, now)}</td>
                 </tr>
               ))}
               {!rows.length && (
                 <tr className="no-hover">
-                  <td colSpan={COLUMNS.length} className="empty">No users match</td>
+                  <td colSpan={COLUMNS.length}>
+                    <div className="empty">Geen gebruikers gevonden. Probeer een andere zoekterm of filter.</div>
+                  </td>
                 </tr>
               )}
             </tbody>

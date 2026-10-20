@@ -1,20 +1,24 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useData } from '../data';
-import { Avatar, Card, Empty, StatTile, useChartProps } from '../components/ui';
+import { Avatar, Card, Empty, useChartProps } from '../components/ui';
+import { CalendarHeatmap } from '../components/charts';
+import { IconArrowLeft, IconCopy } from '../components/icons';
 import {
-  addDays, dayKey, displayName, fmtDate, fmtDateTime, fmtLiters, fmtNum, fmtRelative, fmtVolume, startOfWeek,
+  addDays, dayKey, displayName, fmtDate, fmtDateTime, fmtLiters, fmtNum, fmtRelative, fmtShortDate, fmtVolume,
+  startOfWeek, weeksBetween,
 } from '../utils';
 
 const WEEKS = 26;
+const DAYS = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
 
 function Pref({ label, value }: { label: string; value: boolean | null }) {
   return (
     <div className="pref">
       <span>{label}</span>
       <span className={value === true ? 'pill on' : value === false ? 'pill off' : 'pill'}>
-        {value === true ? 'On' : value === false ? 'Off' : 'Not set'}
+        {value === true ? 'Aan' : value === false ? 'Uit' : 'Onbekend'}
       </span>
     </div>
   );
@@ -22,156 +26,188 @@ function Pref({ label, value }: { label: string; value: boolean | null }) {
 
 export default function UserDetail() {
   const { uid = '' } = useParams();
-  const { data } = useData();
+  const { data, now, events } = useData();
   const chart = useChartProps();
+  const [copied, setCopied] = useState(false);
   const user = data!.usersById.get(uid);
 
   const beers = useMemo(() => data!.beers.filter((b) => b.userId === uid), [data, uid]);
+  const freshBeerIds = useMemo(() => new Set(events.filter((e) => e.kind === 'beer').map((e) => e.docId)), [events]);
 
   const weekly = useMemo(() => {
-    const start = addDays(startOfWeek(new Date()), -7 * (WEEKS - 1));
-    const rows = Array.from({ length: WEEKS }, (_, i) => ({
-      label: addDays(start, i * 7).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-      beers: 0,
-    }));
+    const start = addDays(startOfWeek(now), -7 * (WEEKS - 1));
+    const rows = Array.from({ length: WEEKS }, (_, i) => ({ label: fmtShortDate(addDays(start, i * 7)), biertjes: 0 }));
     for (const b of beers) {
       if (!b.date || b.date < start) continue;
-      const idx = Math.round((startOfWeek(b.date).getTime() - start.getTime()) / (7 * 86_400_000));
-      if (idx >= 0 && idx < WEEKS) rows[idx].beers++;
+      const i = weeksBetween(start, startOfWeek(b.date));
+      if (i >= 0 && i < WEEKS) rows[i].biertjes++;
     }
     return rows;
-  }, [beers]);
+  }, [beers, now]);
 
-  const sizes = useMemo(() => {
-    const m = new Map<number, number>();
-    beers.forEach((b) => m.set(b.volume, (m.get(b.volume) ?? 0) + 1));
-    return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([v, n]) => ({ label: fmtVolume(v), beers: n }));
+  const insights = useMemo(() => {
+    const days = new Map<string, number>();
+    const weekday = new Array(7).fill(0) as number[];
+    const sizes = new Map<number, number>();
+    for (const b of beers) {
+      sizes.set(b.volume, (sizes.get(b.volume) ?? 0) + 1);
+      if (!b.date) continue;
+      days.set(dayKey(b.date), (days.get(dayKey(b.date)) ?? 0) + 1);
+      weekday[(b.date.getDay() + 6) % 7]++;
+    }
+    const best = [...days.entries()].sort((a, b) => b[1] - a[1])[0];
+    const favDay = weekday.some(Boolean) ? weekday.indexOf(Math.max(...weekday)) : -1;
+    const favSize = [...sizes.entries()].sort((a, b) => b[1] - a[1])[0];
+    return {
+      activeDays: days.size,
+      bestDay: best ? { date: new Date(best[0] + 'T00:00:00'), count: best[1] } : null,
+      favDay: favDay >= 0 ? DAYS[favDay] : null,
+      favSize: favSize ? fmtVolume(favSize[0]) : null,
+      sizes: [...sizes.entries()].sort((a, b) => a[0] - b[0]).map(([v, n]) => ({ label: fmtVolume(v), biertjes: n })),
+    };
   }, [beers]);
-
-  const activeDays = useMemo(() => new Set(beers.filter((b) => b.date).map((b) => dayKey(b.date!))).size, [beers]);
 
   if (!user) {
     return (
       <div className="page">
-        <Link to="/users" className="back">← Users</Link>
-        <Card><Empty>User not found. They may have deleted their account.</Empty></Card>
+        <Link to="/users" className="back"><IconArrowLeft /> Gebruikers</Link>
+        <Card><Empty>Deze gebruiker bestaat niet (meer). Misschien is het account verwijderd.</Empty></Card>
       </div>
     );
   }
 
-  const friends = user.friendIds.map((id) => data!.usersById.get(id)).filter((f) => !!f);
+  const friends = user.friendIds.map((id) => data!.usersById.get(id)).filter((f) => f !== undefined);
   const { colors } = chart;
+  const copyUid = async () => {
+    await navigator.clipboard.writeText(user.uid);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
     <div className="page">
-      <Link to="/users" className="back">← Users</Link>
+      <Link to="/users" className="back"><IconArrowLeft /> Gebruikers</Link>
 
-      <div className="profile-head card">
-        <Avatar url={user.photoUrl} name={displayName(user)} size={72} />
-        <div className="profile-info">
-          <h1>{user.username || '(no username)'}</h1>
-          <div className="muted">{user.email}</div>
-          <div className="muted small mono" title="User ID">
-            {user.uid}{' '}
-            <button className="link-btn" onClick={() => navigator.clipboard.writeText(user.uid)}>copy</button>
+      <section className="profile">
+        <div className="profile-banner" style={user.bannerUrl ? { backgroundImage: `url("${user.bannerUrl}")` } : undefined} />
+        <div className="profile-body">
+          <Avatar url={user.photoUrl} name={displayName(user)} size={88} />
+          <div className="profile-info">
+            <h1>{user.username || 'Geen gebruikersnaam'}</h1>
+            <div className="muted">{user.email}</div>
+            <button className="uid" onClick={copyUid} title="Kopieer gebruikers-ID">
+              <code>{user.uid}</code> <IconCopy width={14} height={14} /> <span>{copied ? 'Gekopieerd' : ''}</span>
+            </button>
           </div>
+          <dl className="profile-meta">
+            <div><dt>Lid sinds</dt><dd>{fmtDate(user.createdAt)}</dd></div>
+            <div><dt>Laatst ingelogd</dt><dd>{fmtRelative(user.lastLogin, now)}</dd></div>
+            <div><dt>Laatste biertje</dt><dd>{fmtRelative(user.lastBeer, now)}</dd></div>
+          </dl>
         </div>
-        <div className="profile-meta">
-          <div><span className="muted small">Joined</span><br />{fmtDate(user.createdAt)}</div>
-          <div><span className="muted small">Last seen</span><br />{fmtRelative(user.lastLogin)}</div>
-          <div><span className="muted small">Last beer</span><br />{fmtRelative(user.lastBeer)}</div>
-        </div>
-      </div>
+      </section>
 
-      <div className="tiles">
-        <StatTile label="Beers logged" value={fmtNum(user.beerCount)} sub={user.firstBeer ? `since ${fmtDate(user.firstBeer)}` : undefined} />
-        <StatTile label="Total volume" value={fmtLiters(user.totalCl)} />
-        <StatTile label="Drinking days" value={fmtNum(activeDays)} sub={activeDays ? `${(user.beerCount / activeDays).toFixed(1)} beers per day` : undefined} />
-        <StatTile label="Current streak" value={`${user.currentStreak} d`} sub={`longest ${user.longestStreak} d`} />
-        <StatTile label="Login streak" value={`${user.loginStreak} d`} />
-        <StatTile label="Friends" value={fmtNum(friends.length)} />
-        <StatTile label="Toasts received" value={fmtNum(user.toastsReceived)} />
-      </div>
+      <dl className="facts">
+        <div><dt>Biertjes</dt><dd>{fmtNum(user.beerCount)}</dd></div>
+        <div><dt>Volume</dt><dd>{fmtLiters(user.totalCl)}</dd></div>
+        <div><dt>Drinkdagen</dt><dd>{fmtNum(insights.activeDays)}</dd></div>
+        <div><dt>Per drinkdag</dt><dd>{insights.activeDays ? (user.beerCount / insights.activeDays).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) : '—'}</dd></div>
+        <div><dt>Huidige reeks</dt><dd>{user.currentStreak} d</dd></div>
+        <div><dt>Langste reeks</dt><dd>{user.longestStreak} d</dd></div>
+        <div><dt>Loginreeks</dt><dd>{user.loginStreak} d</dd></div>
+        <div><dt>Proostjes ontvangen</dt><dd>{fmtNum(user.toastsReceived)}</dd></div>
+      </dl>
+
+      <Card
+        title="Het afgelopen jaar"
+        hint={[
+          insights.bestDay && `Drukste dag: ${fmtShortDate(insights.bestDay.date)} met ${insights.bestDay.count} biertjes`,
+          insights.favDay && `Favoriete dag: ${insights.favDay}`,
+          insights.favSize && `Meestal ${insights.favSize}`,
+        ].filter(Boolean).join('. ') || 'Nog geen biertjes gelogd'}
+      >
+        <CalendarHeatmap beers={beers} />
+      </Card>
 
       <div className="grid-2">
-        <Card title={`Beers per week (last ${WEEKS} weeks)`}>
+        <Card title="Biertjes per week" hint={`Laatste ${WEEKS} weken`}>
           <div className="chart-md">
             <ResponsiveContainer>
-              <BarChart data={weekly} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <BarChart data={weekly} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid {...chart.grid} />
-                <XAxis dataKey="label" {...chart.axis} minTickGap={24} />
+                <XAxis dataKey="label" {...chart.axis} minTickGap={28} />
                 <YAxis {...chart.axis} allowDecimals={false} />
                 <Tooltip {...chart.tooltip} />
-                <Bar dataKey="beers" name="Beers" fill={colors.accent} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="biertjes" name="Biertjes" fill={colors.accent} radius={[4, 4, 0, 0]} maxBarSize={22} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
-        <Card title="Glass sizes">
-          {sizes.length ? (
+        <Card title="Glasmaten">
+          {insights.sizes.length ? (
             <div className="chart-md">
               <ResponsiveContainer>
-                <BarChart data={sizes} layout="vertical" margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                <BarChart data={insights.sizes} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
                   <CartesianGrid {...chart.grid} horizontal={false} vertical />
                   <XAxis type="number" {...chart.axis} allowDecimals={false} />
-                  <YAxis type="category" dataKey="label" {...chart.axis} width={56} />
+                  <YAxis type="category" dataKey="label" {...chart.axis} width={52} />
                   <Tooltip {...chart.tooltip} />
-                  <Bar dataKey="beers" name="Beers" fill={colors.accent} radius={[0, 3, 3, 0]} />
+                  <Bar dataKey="biertjes" name="Biertjes" fill={colors.accent} radius={[0, 4, 4, 0]} maxBarSize={26} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           ) : <Empty />}
         </Card>
 
-        <Card title={`Recent beers${beers.length > 50 ? ' (latest 50)' : ''}`}>
+        <Card title="Gelogde biertjes" hint={beers.length > 50 ? 'De laatste 50' : undefined}>
           {beers.length ? (
             <div className="table-wrap tall">
               <table className="table compact">
                 <thead>
-                  <tr><th>When</th><th className="num">Size</th><th className="num">Toasts</th><th>Location</th></tr>
+                  <tr><th>Wanneer</th><th className="num">Maat</th><th className="num">Proostjes</th><th>Locatie</th></tr>
                 </thead>
                 <tbody>
                   {beers.slice(0, 50).map((b) => (
-                    <tr key={b.id} className="no-hover">
+                    <tr key={b.id} className={freshBeerIds.has(b.id) ? 'no-hover fresh' : 'no-hover'}>
                       <td>{fmtDateTime(b.date)}</td>
                       <td className="num">{fmtVolume(b.volume)}</td>
                       <td className="num">{b.toasts || ''}</td>
-                      <td className="muted small">{b.hasLocation ? 'Shared' : ''}</td>
+                      <td className="muted small">{b.hasLocation ? 'Gedeeld' : ''}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : <Empty>No beers logged yet</Empty>}
+          ) : <Empty>Nog geen biertjes gelogd</Empty>}
         </Card>
 
         <div className="stack">
-          <Card title={`Friends (${friends.length})`}>
+          <Card title="Vrienden" hint={`${friends.length} ${friends.length === 1 ? 'vriend' : 'vrienden'}`}>
             {friends.length ? (
-              <ul className="rank-list">
-                {friends.map((f) => (
-                  <li key={f!.uid}>
-                    <Link to={`/users/${f!.uid}`} className="user-cell">
-                      <Avatar url={f!.photoUrl} name={displayName(f!)} size={28} />
-                      <span>{displayName(f!)}</span>
+              <ul className="people">
+                {friends.sort((a, b) => b.beerCount - a.beerCount).map((f) => (
+                  <li key={f.uid}>
+                    <Link to={`/users/${f.uid}`} className="lb-user">
+                      <Avatar url={f.photoUrl} name={displayName(f)} size={30} />
+                      <span className="lb-name">{displayName(f)}</span>
                     </Link>
-                    <span className="num small">{fmtNum(f!.beerCount)} 🍺</span>
+                    <span className="lb-sub">{fmtNum(f.beerCount)} biertjes</span>
                   </li>
                 ))}
               </ul>
-            ) : <Empty>No friends yet</Empty>}
+            ) : <Empty>Nog geen vrienden</Empty>}
           </Card>
 
-          <Card title="App settings">
-            <Pref label="Push notifications" value={user.notifyPushEnabled} />
-            <Pref label="Friend request notifications" value={user.notifyFriendRequests} />
-            <Pref label="Nearby check-in notifications" value={user.notifyNearbyCheckin} />
-            <Pref label="Push token registered" value={user.hasPushToken} />
-            <Pref label="Finished onboarding" value={user.hasSeenOnboarding} />
+          <Card title="Instellingen in de app">
+            <Pref label="Pushmeldingen" value={user.notifyPushEnabled} />
+            <Pref label="Meldingen bij vriendschapsverzoeken" value={user.notifyFriendRequests} />
+            <Pref label="Meldingen als vrienden in de buurt drinken" value={user.notifyNearbyCheckin} />
+            <Pref label="Apparaat geregistreerd voor push" value={user.hasPushToken} />
+            <Pref label="Introductie afgerond" value={user.hasSeenOnboarding} />
             {user.showcasedAchievements.length > 0 && (
               <div className="pref">
-                <span>Showcased trophies</span>
+                <span>Trofeeën op profiel</span>
                 <span className="muted small">{user.showcasedAchievements.join(', ')}</span>
               </div>
             )}

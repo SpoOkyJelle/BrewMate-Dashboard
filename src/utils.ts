@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 export const DAY = 86_400_000;
+const LOCALE = 'nl-NL';
 
 export function startOfDay(d: Date): Date {
   const x = new Date(d);
@@ -14,72 +15,95 @@ export function addDays(d: Date, n: number): Date {
   return x;
 }
 
-/** Monday of the week containing d. */
+/** Maandag van de week waarin d valt. */
 export function startOfWeek(d: Date): Date {
   const x = startOfDay(d);
-  const offset = (x.getDay() + 6) % 7;
-  return addDays(x, -offset);
+  return addDays(x, -((x.getDay() + 6) % 7));
 }
 
 export function dayKey(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const nf = new Intl.NumberFormat('en-US');
+/** Aantal hele weken tussen twee maandagen (robuust tegen zomertijd). */
+export const weeksBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / (7 * DAY));
+
+const nf = new Intl.NumberFormat(LOCALE);
 export const fmtNum = (n: number) => nf.format(n);
 
 export function fmtLiters(cl: number): string {
   const l = cl / 100;
-  return `${l >= 100 ? Math.round(l).toLocaleString('en-US') : l.toFixed(1)} L`;
+  return `${l >= 100 ? fmtNum(Math.round(l)) : l.toLocaleString(LOCALE, { maximumFractionDigits: 1 })} L`;
 }
 
 export function fmtVolume(cl: number): string {
-  return cl >= 100 ? `${cl / 100} L` : `${cl} cl`;
+  return cl >= 100 ? `${(cl / 100).toLocaleString(LOCALE)} L` : `${cl} cl`;
+}
+
+export function fmtPct(n: number): string {
+  return `${Math.round(n * 100)}%`;
 }
 
 export function fmtDate(d: Date | null): string {
   if (!d) return '—';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+export function fmtShortDate(d: Date): string {
+  return d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
 }
 
 export function fmtDateTime(d: Date | null): string {
   if (!d) return '—';
-  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export function fmtRelative(d: Date | null, now = new Date()): string {
   if (!d) return '—';
-  const diff = now.getTime() - d.getTime();
-  const min = Math.round(diff / 60_000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `${h} h ago`;
-  const days = Math.round(diff / DAY);
-  if (days < 30) return `${days} d ago`;
+  const diff = Math.max(0, now.getTime() - d.getTime());
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return 'zojuist';
+  if (min < 60) return `${min} min geleden`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} uur geleden`;
+  const days = Math.floor(diff / DAY);
+  if (days === 1) return 'gisteren';
+  if (days < 30) return `${days} dagen geleden`;
   const months = Math.round(days / 30.4);
-  if (months < 12) return `${months} mo ago`;
-  return `${(days / 365).toFixed(1)} y ago`;
+  if (months < 12) return `${months} mnd geleden`;
+  return `${(days / 365).toLocaleString(LOCALE, { maximumFractionDigits: 1 })} jaar geleden`;
+}
+
+export function fmtDuration(ms: number): string {
+  const h = ms / 3_600_000;
+  if (h < 1) return `${Math.max(1, Math.round(ms / 60_000))} min`;
+  if (h < 48) return `${Math.round(h)} uur`;
+  return `${Math.round(h / 24)} dagen`;
+}
+
+export function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 export function displayName(u: { username: string; email: string; uid: string }): string {
-  return u.username || u.email || u.uid.slice(0, 8);
+  return u.username || u.email.split('@')[0] || u.uid.slice(0, 8);
 }
 
-/** Reads the chart colors from CSS variables so charts follow light/dark mode. */
+/** Leest grafiekkleuren uit CSS-variabelen, zodat grafieken licht/donker volgen. */
 function readChartColors() {
   const s = getComputedStyle(document.documentElement);
   const v = (name: string) => s.getPropertyValue(name).trim();
   return {
-    accent: v('--accent'),
-    accent2: v('--accent-2'),
-    grid: v('--chart-grid'),
-    axis: v('--text-muted'),
-    surface: v('--surface'),
+    accent: v('--amber'),
+    accent2: v('--hop'),
+    grid: v('--grid'),
+    axis: v('--muted'),
+    surface: v('--surface-2'),
     text: v('--text'),
-    border: v('--border'),
+    border: v('--line'),
   };
 }
 
@@ -92,4 +116,15 @@ export function useChartColors() {
     return () => m.removeEventListener('change', onChange);
   }, []);
   return colors;
+}
+
+export function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  useEffect(() => {
+    const m = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onChange = () => setReduced(m.matches);
+    m.addEventListener('change', onChange);
+    return () => m.removeEventListener('change', onChange);
+  }, []);
+  return reduced;
 }
