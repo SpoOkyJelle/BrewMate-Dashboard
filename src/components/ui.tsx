@@ -174,10 +174,11 @@ export function useChartProps() {
       contentStyle: {
         background: c.surface,
         border: `1px solid ${c.border}`,
-        borderRadius: 10,
+        borderRadius: 14,
+        padding: '8px 12px',
         color: c.text,
         fontSize: 13,
-        boxShadow: '0 8px 24px rgba(0,0,0,.25)',
+        boxShadow: '0 18px 40px -14px rgba(20,24,36,.35)',
       },
       labelStyle: { color: c.text, fontWeight: 600, marginBottom: 2 },
       itemStyle: { color: c.text, padding: 0 },

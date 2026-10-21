@@ -380,7 +380,7 @@ export default function Compare() {
                     <YAxis {...chart.axis} unit="%" />
                     <Tooltip {...chart.tooltip} formatter={tooltipFormatter('%')} />
                     {profiles.map((p, i) => (
-                      <Bar key={p.user.uid} dataKey={key(i)} fill={colors[i]} radius={[3, 3, 0, 0]} />
+                      <Bar key={p.user.uid} dataKey={key(i)} fill={colors[i]} radius={[6, 6, 6, 6]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>

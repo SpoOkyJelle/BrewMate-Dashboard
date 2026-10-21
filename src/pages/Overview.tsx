@@ -231,7 +231,7 @@ export default function Overview() {
                 <XAxis dataKey="label" {...chart.axis} minTickGap={28} />
                 <YAxis {...chart.axis} allowDecimals={false} />
                 <Tooltip {...chart.tooltip} />
-                <Bar dataKey="beers" name="Biertjes" fill={colors.accent} radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={700} />
+                <Bar dataKey="beers" name="Biertjes" fill={colors.accent} radius={[8, 8, 8, 8]} maxBarSize={28} animationDuration={700} />
                 <Line dataKey="drinkerCount" name="Drinkers" stroke={colors.accent2} strokeWidth={2} dot={false} type="monotone" animationDuration={900} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -283,7 +283,7 @@ export default function Overview() {
                 <YAxis yAxisId="n" {...chart.axis} allowDecimals={false} />
                 <YAxis yAxisId="t" orientation="right" {...chart.axis} allowDecimals={false} />
                 <Tooltip {...chart.tooltip} />
-                <Bar yAxisId="n" dataKey="nieuw" name="Nieuw" fill={colors.accent} radius={[4, 4, 0, 0]} maxBarSize={24} />
+                <Bar yAxisId="n" dataKey="nieuw" name="Nieuw" fill={colors.accent} radius={[8, 8, 8, 8]} maxBarSize={24} />
                 <Line yAxisId="t" dataKey="totaal" name="Totaal" stroke={colors.accent2} strokeWidth={2} dot={false} type="monotone" />
               </ComposedChart>
             </ResponsiveContainer>
@@ -299,7 +299,7 @@ export default function Overview() {
                   <XAxis type="number" {...chart.axis} allowDecimals={false} />
                   <YAxis type="category" dataKey="label" {...chart.axis} width={56} interval={0} />
                   <Tooltip {...chart.tooltip} />
-                  <Bar dataKey="biertjes" name="Biertjes" fill={colors.accent} radius={[0, 4, 4, 0]} maxBarSize={22} />
+                  <Bar dataKey="biertjes" name="Biertjes" fill={colors.accent} radius={[8, 8, 8, 8]} maxBarSize={22} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -201,7 +201,7 @@ export default function UserDetail() {
                 <XAxis dataKey="label" {...chart.axis} minTickGap={28} />
                 <YAxis {...chart.axis} allowDecimals={false} />
                 <Tooltip {...chart.tooltip} />
-                <Bar dataKey="biertjes" name="Biertjes" fill={colors.accent} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="biertjes" name="Biertjes" fill={colors.accent} radius={[8, 8, 8, 8]} maxBarSize={22} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -216,7 +216,7 @@ export default function UserDetail() {
                   <XAxis type="number" {...chart.axis} allowDecimals={false} />
                   <YAxis type="category" dataKey="label" {...chart.axis} width={52} />
                   <Tooltip {...chart.tooltip} />
-                  <Bar dataKey="biertjes" name="Biertjes" fill={colors.accent} radius={[0, 4, 4, 0]} maxBarSize={26} />
+                  <Bar dataKey="biertjes" name="Biertjes" fill={colors.accent} radius={[8, 8, 8, 8]} maxBarSize={26} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
