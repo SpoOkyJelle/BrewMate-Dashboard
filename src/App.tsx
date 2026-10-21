@@ -11,6 +11,7 @@ import Messages from './pages/Messages';
 import Admins from './pages/Admins';
 import Compare from './pages/Compare';
 import { Toasts } from './components/live';
+import { Topbar } from './components/topbar';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Users from './pages/Users';
@@ -107,6 +108,7 @@ function Layout() {
       </aside>
 
       <main className="content">
+        <Topbar />
         {error ? (
           <div className="panel error-panel">
             <h2>Kan de data niet laden</h2>

@@ -4,8 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
-    <meta name="theme-color" content="#0e0f12" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#eef0f4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#eef0f4" />
+    <script>
+      // Thema zetten vóór de eerste weergave, zodat de pagina niet eerst licht flitst (zie src/theme.ts).
+      (function () {
+        var pref = null;
+        try { pref = localStorage.getItem('theme'); } catch (e) {}
+        var dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

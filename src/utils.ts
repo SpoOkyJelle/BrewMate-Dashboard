@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useIsDark } from './theme';
 
 export const DAY = 86_400_000;
 const LOCALE = 'nl-NL';
@@ -110,26 +111,13 @@ function readChartColors() {
 }
 
 export function useChartColors() {
-  const [colors, setColors] = useState(readChartColors);
-  useEffect(() => {
-    const m = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => setColors(readChartColors());
-    m.addEventListener('change', onChange);
-    return () => m.removeEventListener('change', onChange);
-  }, []);
-  return colors;
+  const dark = useIsDark();
+  // Het thema staat al op <html> voordat React opnieuw rendert, dus de CSS-variabelen kloppen hier.
+  return useMemo(() => readChartColors(), [dark]);
 }
 
-export function useDarkMode() {
-  const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
-  useEffect(() => {
-    const m = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => setDark(m.matches);
-    m.addEventListener('change', onChange);
-    return () => m.removeEventListener('change', onChange);
-  }, []);
-  return dark;
-}
+/** Of het dashboard donker is (systeem of eigen keuze). */
+export const useDarkMode = useIsDark;
 
 export function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
