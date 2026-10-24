@@ -15,7 +15,7 @@ export default function Tonight() {
   const { data, events, now } = useData();
   const chart = useChartProps();
   const navigate = useNavigate();
-  const [startHour, setStartHour] = useState<StartHour>(18);
+  const [startHour, setStartHour] = useState<StartHour>(19);
   const tonight = useTonight(startHour);
 
   // Verse biertjes (net live binnen) lichten op in de feed.
@@ -48,7 +48,7 @@ export default function Tonight() {
             label="Begonnen om"
             value={startHour}
             onChange={setStartHour}
-            options={[{ value: 18, label: '18:00' }, { value: 20, label: '20:00' }, { value: 22, label: '22:00' }]}
+            options={[{ value: 19, label: '19:00' }, { value: 20, label: '20:00' }, { value: 22, label: '22:00' }]}
           />
           <button className="btn primary" onClick={present}>
             <IconPresent /> Presenteren
@@ -91,7 +91,7 @@ export default function Tonight() {
             </p>
           </section>
 
-          <Card title="Ranglijst vanavond" hint="Wie logt er vanavond het meeste? Live bijgewerkt.">
+          <Card title="Ranglijst vanavond" hint="Wie drinkt er vanavond de meeste liters? Live bijgewerkt.">
             {tonight.board.length ? (
               <ol className="leaderboard">
                 {tonight.board.map((r, i) => {
@@ -107,9 +107,9 @@ export default function Tonight() {
                       ) : (
                         <span className="lb-user"><span className="lb-name muted">{name}</span></span>
                       )}
-                      <div className="lb-bar" aria-hidden><span style={{ width: `${(r.beers / tonight.max) * 100}%` }} /></div>
-                      <span className="lb-num">{fmtNum(r.beers)}</span>
-                      <span className="lb-sub">{fmtLiters(r.cl)}</span>
+                      <div className="lb-bar" aria-hidden><span style={{ width: `${(r.cl / tonight.max) * 100}%` }} /></div>
+                      <span className="lb-num">{fmtLiters(r.cl)}</span>
+                      <span className="lb-sub">{fmtNum(r.beers)} biertjes</span>
                     </li>
                   );
                 })}

@@ -9,7 +9,7 @@ export function sessionStartFrom(hour: number, now: Date): Date {
   return s;
 }
 
-export type StartHour = 18 | 20 | 22;
+export type StartHour = 19 | 20 | 22;
 
 export interface BoardRow {
   uid: string;
@@ -61,7 +61,7 @@ export function useTonight(startHour: StartHour): TonightStats | null {
       perUser.set(b.userId, c);
     }
 
-    const board = [...perUser.values()].sort((a, b) => b.beers - a.beers || b.cl - a.cl);
+    const board = [...perUser.values()].sort((a, b) => b.cl - a.cl || b.beers - a.beers);
     const hoursElapsed = Math.max(0.25, (now.getTime() - from) / 3_600_000);
     const drinkers = perUser.size;
     const target = Math.max(10, drinkers * 6);
@@ -81,7 +81,7 @@ export function useTonight(startHour: StartHour): TonightStats | null {
       startLabel: sessionStart.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }),
       beers,
       board,
-      max: board[0]?.beers ?? 1,
+      max: board[0]?.cl ?? 1,
       totalBeers: beers.length,
       totalCl,
       totalToasts,

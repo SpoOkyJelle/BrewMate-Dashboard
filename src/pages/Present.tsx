@@ -15,7 +15,7 @@ export default function Present() {
   const { data, events, now } = useData();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const startHour = (Number(params.get('start')) === 20 ? 20 : Number(params.get('start')) === 22 ? 22 : 18) as StartHour;
+  const startHour = (Number(params.get('start')) === 20 ? 20 : Number(params.get('start')) === 22 ? 22 : 19) as StartHour;
   const tonight = useTonight(startHour);
 
   const freshKeys = useMemo(() => new Set(events.map((e) => e.key)), [events]);
@@ -95,9 +95,9 @@ export default function Present() {
                     <span className="present-rank">{MEDALS[i] ?? i + 1}</span>
                     <Avatar url={r.user?.photoUrl ?? ''} name={name} size={52} />
                     <span className="present-name">{name}</span>
-                    <div className="present-barline" aria-hidden><span style={{ width: `${(r.beers / tonight.max) * 100}%` }} /></div>
-                    <span className="present-count">{fmtNum(r.beers)}</span>
-                    <span className="present-cl">{fmtLiters(r.cl)}</span>
+                    <div className="present-barline" aria-hidden><span style={{ width: `${(r.cl / tonight.max) * 100}%` }} /></div>
+                    <span className="present-count">{fmtLiters(r.cl)}</span>
+                    <span className="present-cl">{fmtNum(r.beers)} biertjes</span>
                   </li>
                 );
               })}
