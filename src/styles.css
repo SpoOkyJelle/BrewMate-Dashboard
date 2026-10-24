@@ -331,6 +331,103 @@ input:focus { outline: none; background: var(--surface); border-color: var(--amb
 .hero-stats dt { color: var(--muted); font-weight: 500; }
 .hero-stats dd { margin: 0; font-family: var(--font-display); font-size: 30px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .hero-foot { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
+.hero-stats .hero-unit { font-size: 15px; font-weight: 600; color: var(--muted); }
+.hero-stats dd.hero-when { font-size: 18px; font-weight: 650; }
+
+/* Confetti bij een nieuw biertje op het Vanavond-scherm. */
+.confetti-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 60; }
+
+.head-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* ---------------- Presentatiescherm (tv / beamer) ---------------- */
+.present {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; grid-template-rows: auto 1fr auto;
+  gap: clamp(12px, 2.2vh, 28px);
+  padding: clamp(16px, 3vh, 40px) clamp(20px, 3.5vw, 64px);
+  background: var(--bg); color: var(--text);
+  overflow: hidden;
+}
+.present-fill { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.present-fill::before {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(60% 55% at 10% -5%, color-mix(in srgb, var(--amber) 22%, transparent), transparent 60%),
+    radial-gradient(55% 50% at 105% 105%, color-mix(in srgb, var(--hop) 20%, transparent), transparent 60%);
+}
+.present-fill::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+  height: calc(var(--level, 0) * 58% + 3%);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--amber) 20%, transparent),
+    color-mix(in srgb, var(--amber) 5%, transparent));
+  transition: height 1.6s var(--ease-out);
+}
+
+.present-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.present-brand { display: flex; align-items: center; gap: 12px; font-size: clamp(16px, 2.1vh, 26px); font-weight: 600; }
+.present-brand strong { font-family: var(--font-display); font-weight: 800; }
+.present-bar-right { display: flex; align-items: center; gap: clamp(14px, 2vw, 32px); }
+.present-live { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 650; font-size: clamp(12px, 1.6vh, 18px); }
+.present-live .live-dot { background: var(--amber); box-shadow: 0 0 0 4px var(--amber-soft); }
+.present-clock { font-family: var(--font-display); font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; font-size: clamp(22px, 3.4vh, 42px); }
+.present-close { width: 44px; height: 44px; }
+
+.present-main {
+  display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(24px, 4vw, 72px); align-items: center; min-height: 0;
+}
+.present-kicker { margin: 0; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; font-size: clamp(13px, 1.8vh, 20px); }
+.present-big { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.05em; font-size: clamp(90px, 21vh, 250px); line-height: 0.9; display: block; margin: 0.04em 0 0.14em -0.03em; color: var(--amber-ink); }
+.present-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(14px, 2.6vh, 30px) clamp(20px, 3vw, 48px); }
+.present-stats > div { display: flex; flex-direction: column; gap: 2px; }
+.present-stat-num { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; font-size: clamp(28px, 5vh, 58px); }
+.present-stat-lbl { color: var(--muted); font-weight: 600; font-size: clamp(13px, 1.7vh, 19px); }
+
+.present-board {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-xl);
+  padding: clamp(18px, 2.6vh, 34px) clamp(20px, 2vw, 36px);
+  backdrop-filter: blur(6px);
+  min-height: 0;
+}
+.present-h2 { font-size: clamp(20px, 3vh, 36px); margin-bottom: clamp(8px, 1.4vh, 18px); }
+.present-board ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: clamp(6px, 1vh, 14px); }
+.present-row {
+  display: grid;
+  grid-template-columns: clamp(34px, 4vh, 56px) auto 1fr auto auto;
+  align-items: center; gap: clamp(12px, 1.6vw, 24px);
+  padding: clamp(6px, 0.9vh, 12px) 0;
+}
+.present-row + .present-row { border-top: 1px solid var(--line); }
+.present-rank { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 3vh, 40px); text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
+.present-row.lead .present-rank { color: var(--amber); }
+.present-row .avatar { flex: none; }
+.present-name { font-weight: 700; font-size: clamp(17px, 2.4vh, 30px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.present-barline { height: clamp(8px, 1.1vh, 14px); border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.present-barline span { display: block; height: 100%; border-radius: inherit; background: var(--gradient); transition: width 0.9s var(--ease-out); }
+.present-count { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 3.2vh, 46px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; min-width: 1.4em; text-align: right; }
+.present-cl { color: var(--muted); font-weight: 600; font-size: clamp(13px, 1.7vh, 20px); white-space: nowrap; min-width: 4.5ch; text-align: right; }
+.present-empty { color: var(--muted); font-size: clamp(20px, 3vh, 34px); font-weight: 650; text-align: center; padding: clamp(24px, 6vh, 80px) 0; line-height: 1.4; }
+
+.present-ticker { display: flex; align-items: center; gap: clamp(12px, 1.6vw, 24px); min-width: 0; }
+.present-ticker-lbl { flex: none; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; font-size: clamp(11px, 1.4vh, 16px); }
+.present-ticker-items { display: flex; gap: clamp(8px, 1vw, 16px); overflow: hidden; flex: 1; min-width: 0; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.present-chip {
+  flex: none; display: inline-flex; align-items: baseline; gap: 8px;
+  padding: clamp(7px, 1vh, 12px) clamp(12px, 1.2vw, 18px);
+  background: var(--surface); border: 1px solid var(--card-border); border-radius: 999px;
+  font-size: clamp(13px, 1.7vh, 20px); box-shadow: var(--shadow); white-space: nowrap;
+}
+.present-chip strong { font-weight: 750; }
+.present-chip-time { color: var(--muted); font-size: 0.82em; }
+.present-chip.fresh { animation: chip-pop 0.5s var(--ease-out); border-color: var(--amber); }
+@keyframes chip-pop { from { transform: scale(0.82); opacity: 0; } }
+
+@media (max-width: 760px), (max-height: 520px) {
+  .present-main { grid-template-columns: 1fr; gap: clamp(14px, 3vh, 28px); align-content: start; overflow-y: auto; }
+}
 
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .metric {

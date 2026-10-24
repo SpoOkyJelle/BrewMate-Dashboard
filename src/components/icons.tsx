@@ -67,3 +67,9 @@ export const IconAuto = (p: P) => (
 export const IconArrowRight = (p: P) => (
   <svg {...base} {...p}><path d="M5 12h14M13 6l6 6-6 6" /></svg>
 );
+export const IconPresent = (p: P) => (
+  <svg {...base} {...p}><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+);
+export const IconClose = (p: P) => (
+  <svg {...base} {...p}><path d="M6 6l12 12M18 6 6 18" /></svg>
+);

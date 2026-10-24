@@ -4,7 +4,7 @@ import { DataProvider, useData } from './data';
 import { fmtNum, fmtRelative } from './utils';
 import { lazy, Suspense } from 'react';
 import {
-  IconChart, IconCompare, IconLogout, IconMap, IconMessage, IconNetwork, IconRetention, IconShield, IconUsers,
+  IconChart, IconCheers, IconCompare, IconLogout, IconMap, IconMessage, IconNetwork, IconRetention, IconShield, IconUsers,
 } from './components/icons';
 import Retention from './pages/Retention';
 import Messages from './pages/Messages';
@@ -14,6 +14,8 @@ import { Toasts } from './components/live';
 import { Topbar } from './components/topbar';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
+import Tonight from './pages/Tonight';
+import Present from './pages/Present';
 import Users from './pages/Users';
 import UserDetail from './pages/UserDetail';
 
@@ -27,15 +29,19 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<RequireAdmin />}>
-        <Route path="/" element={<Overview />} />
-        <Route path="/users" element={<Users />} />
-        <Route path="/users/:uid" element={<UserDetail />} />
-        <Route path="/compare" element={<Compare />} />
-        <Route path="/map" element={<Suspense fallback={pageFallback}><MapPage /></Suspense>} />
-        <Route path="/network" element={<Suspense fallback={pageFallback}><Network /></Suspense>} />
-        <Route path="/retention" element={<Retention />} />
-        <Route path="/messages" element={<Messages />} />
-        <Route path="/admins" element={<Admins />} />
+        <Route path="/present" element={<Present />} />
+        <Route element={<Layout />}>
+          <Route path="/" element={<Overview />} />
+          <Route path="/tonight" element={<Tonight />} />
+          <Route path="/users" element={<Users />} />
+          <Route path="/users/:uid" element={<UserDetail />} />
+          <Route path="/compare" element={<Compare />} />
+          <Route path="/map" element={<Suspense fallback={pageFallback}><MapPage /></Suspense>} />
+          <Route path="/network" element={<Suspense fallback={pageFallback}><Network /></Suspense>} />
+          <Route path="/retention" element={<Retention />} />
+          <Route path="/messages" element={<Messages />} />
+          <Route path="/admins" element={<Admins />} />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -48,7 +54,7 @@ function RequireAdmin() {
   if (status !== 'admin') return <Navigate to="/login" replace />;
   return (
     <DataProvider>
-      <Layout />
+      <Outlet />
     </DataProvider>
   );
 }
@@ -85,6 +91,7 @@ function Layout() {
         </div>
         <nav className="nav" aria-label="Hoofdmenu">
           <NavLink to="/" end><IconChart /> <span>Overzicht</span></NavLink>
+          <NavLink to="/tonight"><IconCheers /> <span>Vanavond</span></NavLink>
           <NavLink to="/users">
             <IconUsers /> <span>Gebruikers</span>
             {data && <span className="nav-count">{fmtNum(data.users.length)}</span>}
