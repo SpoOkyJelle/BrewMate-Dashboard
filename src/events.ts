@@ -113,7 +113,14 @@ export function useGuildEvents() {
           } as GuildEventRow;
         }));
       },
-      (err) => setError(err.message),
+      (err) => {
+        const code = (err as { code?: string }).code;
+        setError(
+          code === 'permission-denied'
+            ? 'Geen leesrechten op de "events"-collectie. Voeg de Firestore-regel voor /events toe (zie README/instructies).'
+            : `${code ?? 'fout'}: ${err.message}`,
+        );
+      },
     );
   }, []);
 

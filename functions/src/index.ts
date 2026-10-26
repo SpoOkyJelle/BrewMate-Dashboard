@@ -1,5 +1,6 @@
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -826,6 +827,64 @@ export const announceGuildEvent = onCall({ region: REGION, maxInstances: 2, time
 });
 
 /**
+ * Admin: end an event early. Unlike cancel (which aborts with no result), this
+ * closes the window now, computes the final standings and — if enabled — sends the
+ * results push with the winner, exactly as a natural end would. The event ends as
+ * 'ended', not 'cancelled'.
+ */
+export const stopGuildEvent = onCall({ region: REGION, maxInstances: 2, timeoutSeconds: 300 }, async (req) => {
+  await requireAdmin(req, 'events vroegtijdig stoppen');
+  const id = String((req.data as { id?: unknown })?.id ?? '');
+  if (!id) throw new HttpsError('invalid-argument', 'Geen event gekozen.');
+  const ref = db.doc(`events/${id}`);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError('not-found', 'Dit event bestaat niet meer.');
+  const ev = snap.data()!;
+  if (ev.status === 'ended' || ev.status === 'cancelled') {
+    throw new HttpsError('failed-precondition', 'Dit event is al afgelopen of geannuleerd.');
+  }
+
+  const now = Timestamp.now();
+  const startAt = (ev.startAt as Timestamp) ?? now;
+  // If it never started, clamp the window to a single instant so it closes cleanly.
+  const effectiveStart = startAt.toMillis() <= now.toMillis() ? startAt : now;
+  const st = await computeEventStandings(ev.metric as EventMetric, effectiveStart, now);
+
+  const update: Record<string, unknown> = {
+    status: 'ended' as EventStatus,
+    endAt: now,
+    endedAt: FieldValue.serverTimestamp(),
+    stoppedEarly: true,
+    guildStandings: st.guilds,
+    soloStandings: st.solo,
+    lastComputedAt: FieldValue.serverTimestamp(),
+  };
+  if (startAt.toMillis() > now.toMillis()) update.startAt = now;
+
+  if (ev.notifyOnEnd && !ev.endNotifiedAt) {
+    const scope = (ev.scope === 'solo' ? 'solo' : 'guild') as EventScope;
+    let line: string;
+    if (scope === 'solo') {
+      const top = st.solo[0];
+      line = top ? `🥇 ${top.username} wint met ${metricPhrase(ev.metric as EventMetric, top.value)}!` : 'Het event is gestopt.';
+    } else {
+      const top = st.guilds[0];
+      line = top ? `🥇 ${top.name} wint met ${metricPhrase(ev.metric as EventMetric, top.value)}!` : 'Het event is gestopt.';
+    }
+    await announceToMembers(
+      st.memberUids,
+      `🏁 ${ev.title} — uitslag`,
+      line,
+      { id, createdByUid: ev.createdByUid, createdByEmail: ev.createdByEmail },
+    );
+    update.endNotifiedAt = FieldValue.serverTimestamp();
+  }
+
+  await ref.update(update);
+  return { ok: true, participants: st.solo.length };
+});
+
+/**
  * Drives every event forward: activates scheduled events whose start has passed
  * (sending the start push to guild members), refreshes standings while an event
  * is running, and ends events whose window has closed (sending the results push).
@@ -909,6 +968,47 @@ export const runGuildEvents = onSchedule(
         if (Object.keys(update).length) await doc.ref.update(update);
       } catch (err) {
         logger.error('runGuildEvents failed for event', { id: doc.id, err });
+      }
+    }
+  },
+);
+
+/**
+ * Keeps event standings live: whenever a beer is logged, any event whose window
+ * currently contains that moment is recomputed immediately, so the board updates
+ * within seconds instead of waiting for the 15-minute cron. Cheap when nothing is
+ * running (one small query returns no in-window events); only recomputes when an
+ * event is actually live.
+ */
+export const onBeerLoggedUpdateEvents = onDocumentCreated(
+  { region: REGION, document: 'beers/{beerId}', maxInstances: 5 },
+  async (event) => {
+    const beer = event.data?.data();
+    const ts = beer?.timestamp as Timestamp | undefined;
+    if (!ts || typeof ts.toMillis !== 'function') return;
+    const tsMs = ts.toMillis();
+    const nowMs = Date.now();
+
+    const snap = await db.collection('events').where('status', 'in', ['scheduled', 'active']).get();
+    for (const doc of snap.docs) {
+      const ev = doc.data();
+      const startAt = ev.startAt as Timestamp | undefined;
+      const endAt = ev.endAt as Timestamp | undefined;
+      if (!startAt || !endAt) continue;
+      // Only events that are live right now and whose window contains this beer.
+      if (startAt.toMillis() > nowMs || endAt.toMillis() <= nowMs) continue;
+      if (tsMs < startAt.toMillis() || tsMs > endAt.toMillis()) continue;
+
+      try {
+        const st = await computeEventStandings(ev.metric as EventMetric, startAt, endAt);
+        await doc.ref.update({
+          guildStandings: st.guilds,
+          soloStandings: st.solo,
+          lastComputedAt: FieldValue.serverTimestamp(),
+          ...(ev.status === 'scheduled' ? { status: 'active', activatedAt: FieldValue.serverTimestamp() } : {}),
+        });
+      } catch (err) {
+        logger.error('onBeerLoggedUpdateEvents failed', { event: doc.id, err });
       }
     }
   },

@@ -239,11 +239,20 @@ function EventCard({ ev, collapsedStandings }: { ev: GuildEventRow; collapsedSta
               onConfirm={() => run('announceGuildEvent', 'announce')}
             />
           )}
+          {status === 'active' && (
+            <ConfirmButton
+              label="Nu stoppen"
+              confirmLabel="Ja, nu beëindigen"
+              danger={false}
+              title="Beëindigt het event nu met de huidige stand en stuurt de uitslag-melding"
+              onConfirm={() => run('stopGuildEvent', 'stop')}
+            />
+          )}
           {status !== 'ended' && status !== 'cancelled' && (
             <ConfirmButton
               label="Annuleren"
               confirmLabel="Ja, annuleren"
-              title="Stopt het event en toekomstige meldingen"
+              title="Breekt het event af zonder uitslag of melding"
               onConfirm={() => run('cancelGuildEvent', 'cancel')}
             />
           )}

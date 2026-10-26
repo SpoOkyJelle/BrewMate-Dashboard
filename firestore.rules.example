@@ -46,6 +46,32 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Guild events (contests). The BrewMate app AND the dashboard read these;
+    // only the Cloud Functions write them (Admin SDK bypasses these rules).
+    // THIS is what the Events page needs — without it the live list fails to load.
+    match /events/{id} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Monthly promotion/relegation locks, written by the rollover Cloud Function.
+    match /leagueRollovers/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Guild leagues. Keep whatever guild WRITE rules your app already uses; the
+    // important part here is that the app + dashboard can READ the guild doc and
+    // its subcollections (members, seasonScores, history) for the leagues,
+    // division detail, contributions and the promotion/relegation banner.
+    match /guilds/{id} {
+      allow read: if signedIn();
+      // allow write: ... // <- keep your existing guild write rules
+      match /{sub=**} {
+        allow read: if signedIn();
+      }
+    }
+
     // Example: keep your existing app rules and make sure admins can read everything.
     match /users/{uid} {
       allow read: if signedIn();                       // app needs this for friends/search
