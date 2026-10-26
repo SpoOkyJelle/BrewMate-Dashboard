@@ -71,10 +71,13 @@ interface DeliverInput {
   sentByUid: string;
   sentByEmail: string;
   scheduledId?: string;
+  /** Payload type the app reads to deep-link a notification tap. */
+  dataType?: string;
 }
 
 /** Verstuurt via Expo, ruimt verlopen tokens op en schrijft het resultaat naar pushLog. */
-async function deliver({ uids, title, body, audienceLabel, sentByUid, sentByEmail, scheduledId }: DeliverInput) {
+async function deliver({ uids, title, body, audienceLabel, sentByUid, sentByEmail, scheduledId, dataType }: DeliverInput) {
+  const notifType = dataType ?? 'admin_message';
 
   // Gebruikers ophalen (in delen, getAll heeft een limiet).
   const snaps: DocumentSnapshot[] = [];
@@ -106,7 +109,7 @@ async function deliver({ uids, title, body, audienceLabel, sentByUid, sentByEmai
       const res = await fetch(EXPO_URL, {
         method: 'POST',
         headers,
-        body: JSON.stringify(chunk.map((t) => ({ to: t.token, title, body, sound: 'default', data: { type: 'admin_message' } }))),
+        body: JSON.stringify(chunk.map((t) => ({ to: t.token, title, body, sound: 'default', data: { type: notifType } }))),
       });
       const json = (await res.json()) as { data?: ExpoTicket[]; errors?: unknown[] };
       if (!res.ok || !Array.isArray(json.data)) {
@@ -714,7 +717,40 @@ async function announceToMembers(
     audienceLabel: 'Guild event',
     sentByUid: String(ev.createdByUid ?? ''),
     sentByEmail: String(ev.createdByEmail ?? ''),
+    dataType: 'guild_event',
   });
+}
+
+/**
+ * Credits the event win when an event ends: +1 to `eventsWon` on each winner's
+ * user doc (the top solo brewer, or every member of the winning guild). Guards on
+ * `eventWinAwarded` so it can never double-count, and records `winnerUids`.
+ * Only the first-place entry with a non-zero total counts as a win.
+ */
+async function awardEventWin(
+  ref: FirebaseFirestore.DocumentReference,
+  ev: Record<string, unknown>,
+  standings: Awaited<ReturnType<typeof computeEventStandings>>,
+) {
+  if (ev.eventWinAwarded) return;
+  const scope: EventScope = ev.scope === 'solo' ? 'solo' : 'guild';
+  let winners: string[] = [];
+
+  if (scope === 'solo') {
+    const top = standings.solo[0];
+    if (top?.uid && top.value > 0) winners = [top.uid];
+  } else {
+    const top = standings.guilds[0];
+    if (top?.guildId && top.value > 0) {
+      const members = await db.collection(`guilds/${top.guildId}/members`).get();
+      winners = members.docs.map((m) => String(m.get('uid') ?? m.id)).filter(Boolean);
+    }
+  }
+
+  // Mark awarded even when there is no winner, so we never retry a dead event.
+  await ref.update({ eventWinAwarded: true, winnerUids: winners });
+  await Promise.all(winners.map((uid) =>
+    db.doc(`users/${uid}`).update({ eventsWon: FieldValue.increment(1) }).catch(() => {})));
 }
 
 function validateEvent(data: Record<string, unknown>) {
@@ -881,6 +917,7 @@ export const stopGuildEvent = onCall({ region: REGION, maxInstances: 2, timeoutS
   }
 
   await ref.update(update);
+  await awardEventWin(ref, ev, st);
   return { ok: true, participants: st.solo.length };
 });
 
@@ -966,6 +1003,9 @@ export const runGuildEvents = onSchedule(
         }
 
         if (Object.keys(update).length) await doc.ref.update(update);
+
+        // Credit the win once the event has just ended and we have final standings.
+        if (finished && standings) await awardEventWin(doc.ref, ev, standings);
       } catch (err) {
         logger.error('runGuildEvents failed for event', { id: doc.id, err });
       }
@@ -989,6 +1029,13 @@ export const onBeerLoggedUpdateEvents = onDocumentCreated(
     const tsMs = ts.toMillis();
     const nowMs = Date.now();
 
+    // Only guild members' beers count toward standings, so skip the recompute
+    // entirely when the brewer isn't in a guild (the common case). One cheap read.
+    const uid = String(beer?.userId ?? '');
+    if (!uid) return;
+    const userSnap = await db.doc(`users/${uid}`).get();
+    if (!userSnap.get('guildId')) return;
+
     const snap = await db.collection('events').where('status', 'in', ['scheduled', 'active']).get();
     for (const doc of snap.docs) {
       const ev = doc.data();
@@ -1010,6 +1057,52 @@ export const onBeerLoggedUpdateEvents = onDocumentCreated(
       } catch (err) {
         logger.error('onBeerLoggedUpdateEvents failed', { event: doc.id, err });
       }
+    }
+  },
+);
+
+/**
+ * Sends the "new friend request" push server-side, reliably: it reads the
+ * recipient's CURRENT push token (so a rotated/late-registered token still works)
+ * and goes through the authenticated `deliver()` path, instead of the client
+ * firing an unauthenticated best-effort push with whatever token it had cached.
+ * Respects the recipient's friend-request preference; `deliver()` handles the
+ * global push toggle, token lookup and dead-token cleanup.
+ */
+export const onFriendRequestCreated = onDocumentCreated(
+  { region: REGION, document: 'friendRequests/{id}', maxInstances: 5 },
+  async (event) => {
+    const req = event.data?.data();
+    if (!req) return;
+    // Only brand-new pending requests notify (accepts/updates recreate nothing here).
+    if (req.status && req.status !== 'pending') return;
+
+    const toUid = String(req.toUserId ?? '');
+    const fromUid = String(req.fromUserId ?? '');
+    if (!toUid || !fromUid || toUid === fromUid) return;
+
+    try {
+      const toSnap = await db.doc(`users/${toUid}`).get();
+      if (toSnap.get('notifyFriendRequests') === false) return;
+
+      // Prefer the sender's username; fall back to the email on the request.
+      const fromSnap = await db.doc(`users/${fromUid}`).get();
+      const senderName =
+        String(fromSnap.get('username') || '') ||
+        String(req.fromUserEmail || '') ||
+        'Someone';
+
+      await deliver({
+        uids: [toUid],
+        title: 'Friend Request',
+        body: `${senderName} sent you a friend request`,
+        audienceLabel: 'Friend request',
+        sentByUid: fromUid,
+        sentByEmail: String(req.fromUserEmail ?? ''),
+        dataType: 'friend_request',
+      });
+    } catch (err) {
+      logger.error('onFriendRequestCreated failed', { id: event.params.id, err });
     }
   },
 );

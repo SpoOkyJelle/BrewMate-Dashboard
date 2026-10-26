@@ -10,7 +10,7 @@ import {
 
 const call = <T,>(name: string, data: unknown) => httpsCallable<unknown, T>(functions, name)(data).then((r) => r.data);
 
-/** Default to a one-week event starting tomorrow at 18:00, in <input datetime-local> form. */
+/** Formats a Date for an <input type="datetime-local"> value. */
 function localInput(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -41,9 +41,9 @@ export default function Events() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Create form
-  const now = new Date();
-  const defStart = new Date(now); defStart.setDate(defStart.getDate() + 1); defStart.setHours(18, 0, 0, 0);
+  // Create form — default to a one-week event starting now, rounded to the minute.
+  const now = new Date(); now.setSeconds(0, 0);
+  const defStart = new Date(now);
   const defEnd = new Date(defStart); defEnd.setDate(defEnd.getDate() + 7);
 
   const [title, setTitle] = useState('');

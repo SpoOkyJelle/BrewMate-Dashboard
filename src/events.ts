@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
 
 /* ---------------- Types (mirror the app's src/types/guildEvent.ts) ---------------- */
@@ -88,7 +88,7 @@ export function useGuildEvents() {
 
   useEffect(() => {
     return onSnapshot(
-      query(collection(db, 'events'), orderBy('startAt', 'desc')),
+      query(collection(db, 'events'), orderBy('startAt', 'desc'), limit(100)),
       (snap) => {
         setError(null);
         setEvents(snap.docs.map((d) => {
