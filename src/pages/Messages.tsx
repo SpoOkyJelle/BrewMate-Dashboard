@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
-import { collection, limit, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { db, functions } from '../firebase';
 import { useData, type UserStats } from '../data';
-import { Avatar, Card, Segmented } from '../components/ui';
-import { IconSearch } from '../components/icons';
-import { addDays, displayName, fmtDateTime, fmtNum, startOfDay } from '../utils';
+import { useAuth } from '../auth';
+import { Avatar, Card, ConfirmButton, Segmented } from '../components/ui';
+import { IconClock, IconSearch } from '../components/icons';
+import { functionErrorMessage } from '../moderation';
+import { addDays, dayKey, displayName, fmtDateTime, fmtNum } from '../utils';
 
 type AudienceKind = 'all' | 'active' | 'inactive' | 'never' | 'pick';
 
@@ -40,6 +42,21 @@ interface LogEntry extends Partial<SendResult> {
   sentAt: Date | null;
 }
 
+interface Scheduled {
+  id: string;
+  title: string;
+  body: string;
+  audienceLabel: string;
+  recipients: number;
+  sendAt: Date | null;
+  createdByEmail: string;
+}
+
+/** Waarde voor <input type="datetime-local">, in lokale tijd. */
+function toLocalInput(d: Date) {
+  return `${dayKey(d)}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 function sendErrorMessage(err: unknown): string {
   const code = (err as { code?: string }).code ?? '';
   const msg = (err as { message?: string }).message ?? '';
@@ -59,7 +76,9 @@ function canReceive(u: UserStats) {
 }
 
 export default function Messages() {
-  const { data, now } = useData();
+  const { data, now, today } = useData();
+  const { user } = useAuth();
+  const me = user ? data!.usersById.get(user.uid) : undefined;
   const [params] = useSearchParams();
   const preset = useMemo(() => (params.get('u') ?? '').split(',').filter((id) => data!.usersById.has(id)), [params, data]);
 
@@ -70,7 +89,18 @@ export default function Messages() {
   const [body, setBody] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ ok: true; r: SendResult } | { ok: false; text: string } | null>(null);
+  const [result, setResult] = useState<
+    { ok: true; r: SendResult; test?: boolean } | { ok: 'scheduled'; at: Date } | { ok: false; text: string } | null
+  >(null);
+  const [when, setWhen] = useState<'now' | 'later'>('now');
+  const [sendAt, setSendAt] = useState(() => {
+    // Standaard: morgen om 17:00.
+    const d = addDays(today, 1);
+    d.setHours(17, 0, 0, 0);
+    return toLocalInput(d);
+  });
+  const [testing, setTesting] = useState(false);
+  const [scheduled, setScheduled] = useState<Scheduled[]>([]);
   const [log, setLog] = useState<LogEntry[] | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
 
@@ -99,8 +129,35 @@ export default function Messages() {
     [],
   );
 
+  // Ingeplande berichten die nog niet verstuurd zijn.
+  useEffect(
+    () =>
+      onSnapshot(
+        query(collection(db, 'scheduledPush'), where('status', '==', 'pending')),
+        (snap) =>
+          setScheduled(
+            snap.docs
+              .map((d) => {
+                const x = d.data();
+                return {
+                  id: d.id,
+                  title: String(x.title ?? ''),
+                  body: String(x.body ?? ''),
+                  audienceLabel: String(x.audienceLabel ?? ''),
+                  recipients: Array.isArray(x.uids) ? x.uids.length : 0,
+                  sendAt: typeof x.sendAt?.toDate === 'function' ? x.sendAt.toDate() : null,
+                  createdByEmail: String(x.createdByEmail ?? ''),
+                };
+              })
+              .sort((a, b) => (a.sendAt?.getTime() ?? 0) - (b.sendAt?.getTime() ?? 0)),
+          ),
+        () => setScheduled([]),
+      ),
+    [],
+  );
+
   const recipients = useMemo(() => {
-    const d30 = addDays(startOfDay(now), -29);
+    const d30 = addDays(today, -29);
     const users = data!.users;
     switch (kind) {
       case 'all': return users;
@@ -109,7 +166,7 @@ export default function Messages() {
       case 'never': return users.filter((u) => u.beerCount === 0);
       case 'pick': return picked.map((id) => data!.usersById.get(id)!).filter(Boolean);
     }
-  }, [kind, picked, data, now]);
+  }, [kind, picked, data, today]);
 
   const counts = useMemo(() => ({
     total: recipients.length,
@@ -129,7 +186,49 @@ export default function Messages() {
       ? recipients.length === 1 ? displayName(recipients[0]) : `${recipients.length} gekozen gebruikers`
       : AUDIENCES.find((a) => a.value === kind)!.label;
 
-  const valid = title.trim() && body.trim() && title.length <= TITLE_MAX && body.length <= BODY_MAX && counts.reachable > 0;
+  const textValid = !!title.trim() && !!body.trim() && title.length <= TITLE_MAX && body.length <= BODY_MAX;
+  const sendAtDate = sendAt ? new Date(sendAt) : null;
+  const sendAtValid = when === 'now' || (!!sendAtDate && !Number.isNaN(sendAtDate.getTime()) && sendAtDate.getTime() > now.getTime() + 60_000);
+  const valid = textValid && counts.reachable > 0 && sendAtValid;
+  const canTest = !!me && canReceive(me);
+
+  /** Stuurt het bericht alleen naar jezelf, om te zien hoe het eruitziet. */
+  const sendTest = async () => {
+    if (!me) return;
+    setTesting(true);
+    setResult(null);
+    try {
+      const call = httpsCallable<unknown, SendResult>(functions, 'sendPush');
+      const res = await call({ uids: [me.uid], title: title.trim(), body: body.trim(), audienceLabel: 'Test naar mezelf' });
+      setResult({ ok: true, r: res.data, test: true });
+    } catch (err) {
+      setResult({ ok: false, text: sendErrorMessage(err) });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const schedule = async () => {
+    setSending(true);
+    setResult(null);
+    try {
+      await httpsCallable(functions, 'schedulePush')({
+        uids: recipients.filter(canReceive).map((u) => u.uid),
+        title: title.trim(),
+        body: body.trim(),
+        audienceLabel,
+        sendAt: sendAtDate!.getTime(),
+      });
+      setResult({ ok: 'scheduled', at: sendAtDate! });
+      setTitle('');
+      setBody('');
+    } catch (err) {
+      setResult({ ok: false, text: functionErrorMessage(err, 'schedulePush') });
+    } finally {
+      setSending(false);
+      setConfirming(false);
+    }
+  };
 
   const send = async () => {
     setSending(true);
@@ -163,7 +262,13 @@ export default function Messages() {
       </header>
 
       {result && (
-        result.ok ? (
+        result.ok === 'scheduled' ? (
+          <div className="banner ok" role="status">Ingepland voor {fmtDateTime(result.at)}. Je ziet het hieronder bij “Ingepland”.</div>
+        ) : result.ok && result.test ? (
+          <div className="banner ok" role="status">
+            {result.r.delivered ? 'Testbericht verstuurd naar je eigen telefoon.' : 'Het testbericht kon niet worden afgeleverd op je telefoon.'}
+          </div>
+        ) : result.ok ? (
           <div className="banner ok" role="status">
             Verstuurd naar {fmtNum(result.r.delivered)} {result.r.delivered === 1 ? 'telefoon' : 'telefoons'}.
             {result.r.failed > 0 && ` ${fmtNum(result.r.failed)} niet afgeleverd.`}
@@ -235,10 +340,63 @@ export default function Messages() {
               <textarea value={body} onChange={(e) => { setBody(e.target.value); setConfirming(false); }} rows={4} placeholder="Wat wil je zeggen?" maxLength={BODY_MAX + 40} />
             </label>
 
+            <div className="field">
+              <span className="field-label">Wanneer</span>
+              <div className="when-row">
+                <Segmented
+                  label="Wanneer"
+                  value={when}
+                  onChange={(v) => { setWhen(v); setConfirming(false); }}
+                  options={[{ value: 'now', label: 'Direct' }, { value: 'later', label: 'Later' }]}
+                />
+                {when === 'later' && (
+                  <input
+                    type="datetime-local"
+                    className="when-input"
+                    value={sendAt}
+                    min={toLocalInput(now)}
+                    onChange={(e) => { setSendAt(e.target.value); setConfirming(false); }}
+                    aria-label="Verstuurmoment"
+                  />
+                )}
+              </div>
+              {when === 'later' && (
+                <span className="muted small">
+                  {sendAtValid
+                    ? 'De ontvangers worden nu vastgelegd. Het bericht gaat binnen 5 minuten na dit moment de deur uit.'
+                    : 'Kies een moment in de toekomst.'}
+                </span>
+              )}
+            </div>
+
             {!confirming ? (
-              <button type="button" className="btn primary" disabled={!valid || sending} onClick={() => setConfirming(true)}>
-                Bericht versturen
-              </button>
+              <div className="confirm-actions">
+                <button type="button" className="btn primary" disabled={!valid || sending} onClick={() => setConfirming(true)}>
+                  {when === 'now' ? 'Bericht versturen' : 'Bericht inplannen'}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!textValid || !canTest || testing}
+                  onClick={sendTest}
+                  title={canTest ? 'Stuur dit bericht alleen naar je eigen telefoon' : 'Je eigen account heeft geen telefoon gekoppeld voor push'}
+                >
+                  {testing ? 'Bezig…' : 'Test naar mij'}
+                </button>
+              </div>
+            ) : when === 'later' ? (
+              <div className="confirm-box" role="alertdialog" aria-label="Bevestigen">
+                <p>
+                  Dit plant een pushbericht in voor <strong>{fmtDateTime(sendAtDate)}</strong> naar{' '}
+                  <strong>{fmtNum(counts.reachable)} {counts.reachable === 1 ? 'persoon' : 'mensen'}</strong>. Tot dat moment kun je het annuleren.
+                </p>
+                <div className="confirm-actions">
+                  <button type="button" className="btn primary" onClick={schedule} disabled={sending}>
+                    {sending ? 'Bezig…' : 'Ja, inplannen'}
+                  </button>
+                  <button type="button" className="btn" onClick={() => setConfirming(false)} disabled={sending}>Annuleren</button>
+                </div>
+              </div>
             ) : (
               <div className="confirm-box" role="alertdialog" aria-label="Bevestigen">
                 <p>
@@ -271,6 +429,38 @@ export default function Messages() {
           <p className="muted small center-text">Zo ongeveer ziet het er op het vergrendelscherm uit.</p>
         </div>
       </div>
+
+      {scheduled.length > 0 && (
+        <Card title="Ingepland" hint="Nog niet verstuurd. Annuleren kan tot het verstuurmoment.">
+          <ul className="msg-log">
+            {scheduled.map((m) => (
+              <li key={m.id}>
+                <div className="msg-log-main">
+                  <div className="strong">{m.title}</div>
+                  <div className="muted">{m.body}</div>
+                </div>
+                <div className="msg-log-meta small">
+                  <div><IconClock width={14} height={14} className="inline-icon" /> <strong>{fmtDateTime(m.sendAt)}</strong></div>
+                  <div className="muted">{m.audienceLabel} · {fmtNum(m.recipients)} ontvangers</div>
+                  {m.createdByEmail && <div className="muted">door {m.createdByEmail}</div>}
+                  <ConfirmButton
+                    label="Annuleren"
+                    confirmLabel="Ja, annuleer"
+                    className="btn xs"
+                    onConfirm={async () => {
+                      try {
+                        await httpsCallable(functions, 'cancelScheduledPush')({ id: m.id });
+                      } catch (err) {
+                        throw new Error(functionErrorMessage(err, 'cancelScheduledPush'));
+                      }
+                    }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Card title="Eerder verstuurd">
         {logError ? (

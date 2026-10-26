@@ -31,6 +31,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Ingeplande berichten, geblokkeerde gebruikers en het moderatielogboek.
+    // Alleen de Cloud Functions schrijven hier; beheerders kunnen meekijken.
+    match /scheduledPush/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /blockedUsers/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /moderationLog/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Example: keep your existing app rules and make sure admins can read everything.
     match /users/{uid} {
       allow read: if signedIn();                       // app needs this for friends/search

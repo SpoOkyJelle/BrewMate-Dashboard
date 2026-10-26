@@ -67,3 +67,15 @@ export const IconAuto = (p: P) => (
 export const IconArrowRight = (p: P) => (
   <svg {...base} {...p}><path d="M5 12h14M13 6l6 6-6 6" /></svg>
 );
+export const IconAlert = (p: P) => (
+  <svg {...base} {...p}><path d="M10.3 4.2 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z" /><path d="M12 9.5v4.5M12 17.2v.1" /></svg>
+);
+export const IconMore = (p: P) => (
+  <svg {...base} {...p}><circle cx="5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="19" cy="12" r="1.3" /></svg>
+);
+export const IconTrash = (p: P) => (
+  <svg {...base} {...p}><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" /><path d="M9 7V4h6v3" /></svg>
+);
+export const IconClock = (p: P) => (
+  <svg {...base} {...p}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
+);

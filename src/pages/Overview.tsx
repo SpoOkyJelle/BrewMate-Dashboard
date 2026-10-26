@@ -1,83 +1,81 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { useData, type Dataset } from '../data';
-import { Avatar, Card, Empty, Metric, Odometer, Segmented, useChartProps } from '../components/ui';
+import { useData } from '../data';
+import { Avatar, Card, Empty, Metric, Odometer, useChartProps } from '../components/ui';
 import { Funnel, WeekHourHeatmap } from '../components/charts';
 import { LiveFeed } from '../components/live';
 import { AchievementRarity } from '../components/achievements';
 import { achievementsFor } from '../achievements';
+import { inPeriod, periodDays, usePeriod } from '../period';
+import { firstBeerDate, funnel as buildFunnel, series, topDrinkers, uniqueDrinkers } from '../stats';
 import {
-  addDays, dayKey, displayName, fmtDuration, fmtLiters, fmtNum, fmtPct, fmtShortDate, fmtVolume, median,
+  addDays, displayName, fmtDuration, fmtLiters, fmtNum, fmtPct, fmtShortDate, fmtVolume, median,
   startOfDay, startOfWeek, weeksBetween,
 } from '../utils';
 
-/** Per dag: biertjes, unieke drinkers, centiliters en aanmeldingen, voor de laatste `days` dagen. */
-function dailySeries(data: Dataset, days: number, now: Date) {
-  const start = addDays(startOfDay(now), -(days - 1));
-  const rows = Array.from({ length: days }, (_, i) => {
-    const date = addDays(start, i);
-    return { key: dayKey(date), label: fmtShortDate(date), beers: 0, cl: 0, signups: 0, drinkers: new Set<string>() };
-  });
-  const index = new Map(rows.map((r, i) => [r.key, i]));
-  for (const b of data.beers) {
-    if (!b.date || b.date < start) continue;
-    const r = rows[index.get(dayKey(b.date)) ?? -1];
-    if (!r) continue;
-    r.beers++;
-    r.cl += b.volume;
-    r.drinkers.add(b.userId);
-  }
-  for (const u of data.users) {
-    if (!u.createdAt || u.createdAt < start) continue;
-    const r = rows[index.get(dayKey(u.createdAt)) ?? -1];
-    if (r) r.signups++;
-  }
-  return rows.map(({ drinkers, ...r }) => ({ ...r, drinkerCount: drinkers.size }));
-}
-
-function uniqueDrinkers(data: Dataset, from: Date, to: Date) {
-  const s = new Set<string>();
-  for (const b of data.beers) if (b.date && b.date >= from && b.date < to) s.add(b.userId);
-  return s.size;
-}
+/** Boven zoveel dagen tonen we per week in plaats van per dag. */
+const MAX_DAILY = 120;
 
 export default function Overview() {
-  const { data, now } = useData();
+  const { data, now, today: midnight } = useData();
   const chart = useChartProps();
-  const [range, setRange] = useState<30 | 90 | 365>(30);
-  const [topRange, setTopRange] = useState<'30' | 'all'>('30');
+  const period = usePeriod(midnight);
 
-  // Live cijfers voor vandaag. `now` tikt elke 15 s mee.
+  // Gemiddelde over de 4 weken vóór vandaag: verandert maar één keer per dag.
+  const avgPerDay = useMemo(
+    () => data!.beers.filter((b) => b.date && b.date >= addDays(midnight, -28) && b.date < midnight).length / 28,
+    [data, midnight],
+  );
+  const signupsWeek = useMemo(
+    () => data!.users.filter((u) => u.createdAt && u.createdAt >= startOfWeek(midnight)).length,
+    [data, midnight],
+  );
+
+  // Live cijfers voor vandaag. `now` tikt elke 15 s mee, dus dit moet licht blijven: de biertjes
+  // staan nieuwste eerst, en we stoppen zodra we vóór middernacht zitten.
   const today = useMemo(() => {
     const d = data!;
-    const midnight = startOfDay(now);
     const hourAgo = new Date(now.getTime() - 3_600_000);
-    const todays = d.beers.filter((b) => b.date && b.date >= midnight);
-    const avgStart = addDays(midnight, -28);
-    const last28 = d.beers.filter((b) => b.date && b.date >= avgStart && b.date < midnight).length;
-    const avgPerDay = last28 / 28;
+    const stop = hourAgo < midnight ? hourAgo : midnight;
+    const todays = [];
+    const hourDrinkers = new Set<string>();
+    for (const b of d.beers) {
+      if (!b.date) continue; // biertjes zonder datum staan vooraan
+      if (b.date < stop) break;
+      if (b.date >= midnight) todays.push(b);
+      if (b.date >= hourAgo) hourDrinkers.add(b.userId);
+    }
     return {
       beers: todays.length,
       cl: todays.reduce((s, b) => s + b.volume, 0),
-      drinkersHour: new Set(d.beers.filter((b) => b.date && b.date >= hourAgo).map((b) => b.userId)).size,
+      drinkersHour: hourDrinkers.size,
       drinkersToday: new Set(todays.map((b) => b.userId)).size,
       signups: d.users.filter((u) => u.createdAt && u.createdAt >= midnight).length,
-      signupsWeek: d.users.filter((u) => u.createdAt && u.createdAt >= startOfWeek(now)).length,
+      signupsWeek,
       avgPerDay,
       level: avgPerDay ? Math.min(1, todays.length / (avgPerDay * 1.5)) : todays.length ? 1 : 0,
     };
-  }, [data, now]);
+  }, [data, now, midnight, avgPerDay, signupsWeek]);
 
-  const last30 = useMemo(() => dailySeries(data!, 30, now), [data, now]);
-  const daily = useMemo(() => (range === 30 ? last30 : dailySeries(data!, range, now)), [data, range, last30, now]);
+  // Alles hieronder rekent per dag en hangt dus af van middernacht, niet van de klok die elke 15 s tikt.
+  const last30 = useMemo(() => series(data!, addDays(midnight, -29), addDays(midnight, 1), 'day'), [data, midnight]);
+
+  // Biertjes in de gekozen periode (gedeeld met de Kaart).
+  const periodBeers = useMemo(() => data!.beers.filter((b) => inPeriod(b.date, period)), [data, period]);
+  const daily = useMemo(() => {
+    const first = firstBeerDate(data!.beers);
+    const unit = periodDays(period, first) > MAX_DAILY ? 'week' : 'day';
+    const from = period.from ?? startOfDay(first ?? midnight);
+    return { unit, rows: series(data!, from, period.to, unit) };
+  }, [data, period, midnight]);
 
   // Deze 7 dagen vs de 7 dagen daarvoor.
   const metrics = useMemo(() => {
     const d = data!;
-    const end = addDays(startOfDay(now), 1);
+    const end = addDays(midnight, 1);
     const mid = addDays(end, -7);
     const start = addDays(end, -14);
     const sum = (rows: typeof last30, f: (r: (typeof last30)[number]) => number) => rows.reduce((s, r) => s + f(r), 0);
@@ -87,14 +85,13 @@ export default function Overview() {
       signups: [sum(cur, (r) => r.signups), sum(prev, (r) => r.signups)],
       beers: [sum(cur, (r) => r.beers), sum(prev, (r) => r.beers)],
       cl: [sum(cur, (r) => r.cl), sum(prev, (r) => r.cl)],
-      drinkers: [uniqueDrinkers(d, mid, end), uniqueDrinkers(d, start, mid)],
+      drinkers: [uniqueDrinkers(d.beers, mid, end), uniqueDrinkers(d.beers, start, mid)],
     };
-  }, [data, last30, now]);
+  }, [data, last30, midnight]);
 
   const facts = useMemo(() => {
     const d = data!;
-    const d30 = addDays(startOfDay(now), -29);
-    const mau = uniqueDrinkers(d, d30, now);
+    const mau = uniqueDrinkers(d.beers, addDays(midnight, -29), addDays(midnight, 1));
     const drinkers = d.users.filter((u) => u.beerCount > 0);
     const firstBeerDelay = median(
       drinkers.filter((u) => u.createdAt && u.firstBeer).map((u) => u.firstBeer!.getTime() - u.createdAt!.getTime()).filter((ms) => ms >= 0),
@@ -107,25 +104,13 @@ export default function Overview() {
       perDrinker: drinkers.length ? d.beers.length / drinkers.length : null,
       withFriends: d.users.filter((u) => u.friendIds.length > 0).length,
     };
-  }, [data, now, today.drinkersToday]);
+  }, [data, midnight, today.drinkersToday]);
 
-  const funnel = useMemo(() => {
-    const d = data!;
-    const d30 = addDays(startOfDay(now), -29);
-    const first = d.users.filter((u) => u.beerCount > 0);
-    const regular = first.filter((u) => u.beerCount >= 10);
-    const retained = regular.filter((u) => u.lastBeer && u.lastBeer >= d30);
-    return [
-      { label: 'Aangemeld', value: d.users.length },
-      { label: 'Eerste biertje gelogd', value: first.length },
-      { label: '10 of meer biertjes', value: regular.length },
-      { label: 'Nog actief (30 dagen)', value: retained.length },
-    ];
-  }, [data, now]);
+  const funnel = useMemo(() => buildFunnel(data!, midnight), [data, midnight]);
 
   const growth = useMemo(() => {
     const weeks = 26;
-    const start = addDays(startOfWeek(now), -7 * (weeks - 1));
+    const start = addDays(startOfWeek(midnight), -7 * (weeks - 1));
     const counts = new Array(weeks).fill(0) as number[];
     let before = 0;
     for (const u of data!.users) {
@@ -136,35 +121,22 @@ export default function Overview() {
     }
     let total = before;
     return counts.map((n, i) => ({ label: fmtShortDate(addDays(start, i * 7)), nieuw: n, totaal: (total += n) }));
-  }, [data, now]);
+  }, [data, midnight]);
 
   const sizes = useMemo(() => {
     const m = new Map<number, number>();
-    data!.beers.forEach((b) => m.set(b.volume, (m.get(b.volume) ?? 0) + 1));
+    periodBeers.forEach((b) => m.set(b.volume, (m.get(b.volume) ?? 0) + 1));
     // De 6 populairste maten, de rest samen als "Overig".
     const byCount = [...m.entries()].sort((a, b) => b[1] - a[1]);
     const main = byCount.slice(0, 6).sort((a, b) => a[0] - b[0]).map(([vol, n]) => ({ label: fmtVolume(vol), biertjes: n }));
     const rest = byCount.slice(6).reduce((s, [, n]) => s + n, 0);
     return rest ? [...main, { label: 'Overig', biertjes: rest }] : main;
-  }, [data]);
+  }, [periodBeers]);
 
   const top = useMemo(() => {
-    const since = topRange === '30' ? addDays(startOfDay(now), -29) : null;
-    const counts = new Map<string, { beers: number; cl: number }>();
-    for (const b of data!.beers) {
-      if (since && (!b.date || b.date < since)) continue;
-      const c = counts.get(b.userId) ?? { beers: 0, cl: 0 };
-      c.beers++;
-      c.cl += b.volume;
-      counts.set(b.userId, c);
-    }
-    const rows = [...counts.entries()]
-      .map(([uid, c]) => ({ user: data!.usersById.get(uid)!, uid, ...c }))
-      .filter((r) => r.user)
-      .sort((a, b) => b.beers - a.beers)
-      .slice(0, 8);
+    const rows = topDrinkers(data!, periodBeers);
     return { rows, max: rows[0]?.beers ?? 1 };
-  }, [data, topRange, now]);
+  }, [data, periodBeers]);
 
   if (!data) return null;
   const { colors } = chart;
@@ -213,20 +185,12 @@ export default function Overview() {
         </div>
 
         <Card
-          title="Biertjes per dag"
-          hint="Staven zijn biertjes, de lijn is het aantal unieke drinkers"
-          actions={
-            <Segmented
-              label="Periode"
-              value={range}
-              onChange={setRange}
-              options={[{ value: 30, label: '30 dagen' }, { value: 90, label: '90 dagen' }, { value: 365, label: '1 jaar' }]}
-            />
-          }
+          title={daily.unit === 'week' ? 'Biertjes per week' : 'Biertjes per dag'}
+          hint={`${capitalize(period.label)}. Staven zijn biertjes, de lijn is het aantal unieke drinkers`}
         >
           <div className="chart-lg">
             <ResponsiveContainer>
-              <ComposedChart data={daily} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
+              <ComposedChart data={daily.rows} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
                 <CartesianGrid {...chart.grid} />
                 <XAxis dataKey="label" {...chart.axis} minTickGap={28} />
                 <YAxis {...chart.axis} allowDecimals={false} />
@@ -266,8 +230,8 @@ export default function Overview() {
       </dl>
 
       <div className="grid-2 span-all">
-        <Card title="Wanneer wordt er gedronken?" hint="Alle biertjes ooit, per dag van de week en uur">
-          {data.beers.length ? <WeekHourHeatmap beers={data.beers} /> : <Empty />}
+        <Card title="Wanneer wordt er gedronken?" hint={`${capitalize(period.label)}, per dag van de week en uur`}>
+          {periodBeers.length ? <WeekHourHeatmap beers={periodBeers} /> : <Empty>Geen biertjes in deze periode</Empty>}
         </Card>
 
         <Card title="Van aanmelding tot vaste drinker" hint="Hoeveel gebruikers elke stap halen">
@@ -290,7 +254,7 @@ export default function Overview() {
           </div>
         </Card>
 
-        <Card title="Glasmaten" hint="Welke maat wordt het meest gelogd">
+        <Card title="Glasmaten" hint={`Welke maat het meest gelogd wordt, ${period.label}`}>
           {sizes.length ? (
             <div className="chart-md">
               <ResponsiveContainer>
@@ -303,20 +267,10 @@ export default function Overview() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          ) : <Empty />}
+          ) : <Empty>Geen biertjes in deze periode</Empty>}
         </Card>
 
-        <Card
-          title="Topdrinkers"
-          actions={
-            <Segmented
-              label="Periode"
-              value={topRange}
-              onChange={setTopRange}
-              options={[{ value: '30', label: '30 dagen' }, { value: 'all', label: 'Altijd' }]}
-            />
-          }
-        >
+        <Card title="Topdrinkers" hint={capitalize(period.label)}>
           {top.rows.length ? (
             <ol className="leaderboard">
               {top.rows.map((r, i) => (
@@ -360,3 +314,5 @@ export default function Overview() {
     </div>
   );
 }
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

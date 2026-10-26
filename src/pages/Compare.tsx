@@ -109,7 +109,7 @@ function winners(row: Row, profiles: Profile[]): Set<number> {
 }
 
 export default function Compare() {
-  const { data, now } = useData();
+  const { data, today: now } = useData();
   const chart = useChartProps();
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');

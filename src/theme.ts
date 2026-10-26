@@ -4,7 +4,8 @@ import { useSyncExternalStore } from 'react';
 export type ThemePref = 'system' | 'light' | 'dark';
 
 const KEY = 'theme';
-const media = window.matchMedia('(prefers-color-scheme: dark)');
+// Buiten de browser (bijv. in tests) is er geen window; dan gewoon licht.
+const media = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 const listeners = new Set<() => void>();
 
 function readPref(): ThemePref {
@@ -18,17 +19,18 @@ function readPref(): ThemePref {
 }
 
 let pref = readPref();
-let dark = pref === 'dark' || (pref === 'system' && media.matches);
+let dark = pref === 'dark' || (pref === 'system' && !!media?.matches);
 
 /** Zet het uiteindelijke thema op <html data-theme>; de CSS kijkt alleen daarnaar. */
 function apply() {
-  dark = pref === 'dark' || (pref === 'system' && media.matches);
+  dark = pref === 'dark' || (pref === 'system' && !!media?.matches);
+  if (typeof document === 'undefined') return;
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0e0f12' : '#eef0f4');
   listeners.forEach((l) => l());
 }
 
-media.addEventListener('change', apply);
+media?.addEventListener('change', apply);
 apply();
 
 export function setThemePref(next: ThemePref) {

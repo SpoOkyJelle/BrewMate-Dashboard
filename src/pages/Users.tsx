@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useData, type UserStats } from '../data';
 import { achievementsFor, type UserAchievements } from '../achievements';
 import { Avatar, Card } from '../components/ui';
 import { IconDownload, IconSearch } from '../components/icons';
+import { useBlockedUsers } from '../moderation';
 import { addDays, displayName, fmtDate, fmtLiters, fmtNum, fmtRelative, startOfDay } from '../utils';
 
 type SortKey = 'name' | 'createdAt' | 'lastLogin' | 'beerCount' | 'totalCl' | 'lastBeer' | 'currentStreak' | 'friends' | 'achievements';
-type Filter = 'all' | 'active' | 'inactive' | 'never' | 'new';
+type Filter = 'all' | 'active' | 'inactive' | 'never' | 'new' | 'blocked';
+const FILTERS: Filter[] = ['all', 'active', 'inactive', 'never', 'new', 'blocked'];
+const PAGE_SIZE = 50;
 type Status = 'drinking' | 'active' | 'new' | 'inactive' | 'never';
 
 const COLUMNS: { key: SortKey; label: string; numeric?: boolean }[] = [
@@ -66,9 +69,36 @@ function toCsv(users: UserStats[]): string {
 export default function Users() {
   const { data, now, events } = useData();
   const navigate = useNavigate();
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<Filter>('all');
-  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'lastBeer', desc: true });
+  const blocked = useBlockedUsers();
+
+  // Zoekterm, filter, sortering en pagina staan in de link: deelbaar, en ze blijven staan als je terugklikt.
+  const [params, setParams] = useSearchParams();
+  const query = params.get('q') ?? '';
+  const filterParam = params.get('filter') as Filter | null;
+  const filter: Filter = filterParam && FILTERS.includes(filterParam) ? filterParam : 'all';
+  const sortParam = params.get('sort') as SortKey | null;
+  const sort = {
+    key: sortParam && COLUMNS.some((c) => c.key === sortParam) ? sortParam : 'lastBeer' as SortKey,
+    desc: params.get('dir') !== 'asc',
+  };
+  const page = Math.max(1, Number(params.get('page')) || 1);
+
+  /** Past de link aan; lege of standaardwaarden laten we weg. Een nieuwe zoekopdracht begint op pagina 1. */
+  const update = (changes: Record<string, string | null>, push = false) => {
+    const next = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    if (!('page' in changes)) next.delete('page');
+    setParams(next, { replace: !push });
+  };
+  const setQuery = (q: string) => update({ q: q || null });
+  const setFilter = (f: Filter) => update({ filter: f === 'all' ? null : f }, true);
+  const setPage = (n: number) => {
+    update({ page: n > 1 ? String(n) : null }, true);
+    document.querySelector('.content')?.scrollIntoView({ block: 'start' });
+  };
 
   const freshUids = useMemo(() => new Set(events.filter((e) => e.kind === 'signup').map((e) => e.uid)), [events]);
 
@@ -76,18 +106,20 @@ export default function Users() {
   const withStatus = useMemo(() => data!.users.map((u) => ({ u, status: statusOf(u, now) })), [data, now]);
 
   const counts = useMemo(() => {
-    const c = { all: withStatus.length, active: 0, inactive: 0, never: 0, new: 0 };
-    withStatus.forEach(({ status }) => {
+    const c = { all: withStatus.length, active: 0, inactive: 0, never: 0, new: 0, blocked: 0 };
+    withStatus.forEach(({ u, status }) => {
       if (status === 'drinking' || status === 'active') c.active++;
       else c[status]++;
+      if (blocked.has(u.uid)) c.blocked++;
     });
     return c;
-  }, [withStatus]);
+  }, [withStatus, blocked]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = withStatus.filter(({ u, status }) => {
       if (q && !`${u.username} ${u.email} ${u.uid}`.toLowerCase().includes(q)) return false;
+      if (filter === 'blocked') return blocked.has(u.uid);
       if (filter === 'active') return status === 'active' || status === 'drinking';
       if (filter !== 'all') return status === filter;
       return true;
@@ -98,10 +130,22 @@ export default function Users() {
       const vb = sortValue(b.u, sort.key, ach);
       return va < vb ? -dir : va > vb ? dir : 0;
     });
-  }, [withStatus, query, filter, sort, ach]);
+  }, [withStatus, query, filter, sort.key, sort.desc, ach, blocked]);
 
-  const toggleSort = (key: SortKey) =>
-    setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== 'name' }));
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const current = Math.min(page, pages);
+  const visible = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
+  // Pagina buiten bereik (bijv. na filteren via een oude link): terug naar de laatste.
+  useEffect(() => {
+    if (page > pages) setPage(pages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pages]);
+
+  const toggleSort = (key: SortKey) => {
+    const desc = sort.key === key ? !sort.desc : key !== 'name';
+    update({ sort: key === 'lastBeer' ? null : key, dir: desc ? null : 'asc' });
+  };
 
   const exportCsv = () => {
     const blob = new Blob([toCsv(rows.map((r) => r.u))], { type: 'text/csv;charset=utf-8' });
@@ -118,6 +162,7 @@ export default function Users() {
     { value: 'new', label: 'Nieuw' },
     { value: 'inactive', label: 'Slapend' },
     { value: 'never', label: 'Nooit gelogd' },
+    ...(counts.blocked ? [{ value: 'blocked' as Filter, label: 'Geblokkeerd' }] : []),
   ];
 
   return (
@@ -179,7 +224,7 @@ export default function Users() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ u, status }) => (
+              {visible.map(({ u, status }) => (
                 <tr
                   key={u.uid}
                   className={freshUids.has(u.uid) ? 'fresh' : ''}
@@ -197,6 +242,7 @@ export default function Users() {
                         <div className="user-name">
                           {u.username || <span className="muted">Geen gebruikersnaam</span>}
                           <span className={`status s-${status}`}>{STATUS_LABEL[status]}</span>
+                          {blocked.has(u.uid) && <span className="status s-blocked">Geblokkeerd</span>}
                         </div>
                         <div className="muted small">{u.email}</div>
                       </div>
@@ -225,6 +271,19 @@ export default function Users() {
             </tbody>
           </table>
         </div>
+
+        {pages > 1 && (
+          <nav className="pager" aria-label="Pagina's">
+            <span className="muted small">
+              {fmtNum((current - 1) * PAGE_SIZE + 1)}–{fmtNum(Math.min(current * PAGE_SIZE, rows.length))} van {fmtNum(rows.length)}
+            </span>
+            <div className="pager-buttons">
+              <button className="btn sm" disabled={current <= 1} onClick={() => setPage(current - 1)}>Vorige</button>
+              <span className="pager-pos">Pagina {current} van {pages}</span>
+              <button className="btn sm" disabled={current >= pages} onClick={() => setPage(current + 1)}>Volgende</button>
+            </div>
+          </nav>
+        )}
       </Card>
     </div>
   );

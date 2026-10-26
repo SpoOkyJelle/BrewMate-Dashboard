@@ -3,24 +3,16 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useData } from '../data';
 import { BeerMap, toPoints, type MapMode } from '../components/BeerMap';
 import { Avatar, Card, Segmented } from '../components/ui';
-import { addDays, displayName, fmtNum, fmtPct, fmtRelative, startOfDay } from '../utils';
-
-type Period = '7' | '30' | '365' | 'all';
-
-const PERIODS: { value: Period; label: string }[] = [
-  { value: '7', label: '7 dagen' },
-  { value: '30', label: '30 dagen' },
-  { value: '365', label: '1 jaar' },
-  { value: 'all', label: 'Altijd' },
-];
+import { displayName, fmtNum, fmtPct, fmtRelative } from '../utils';
+import { inPeriod as isInPeriod, usePeriod } from '../period';
 
 /** Plekken: biertjes gegroepeerd op een raster van ongeveer 100 bij 100 meter. */
 const spotKey = (lat: number, lng: number) => `${lat.toFixed(3)},${lng.toFixed(3)}`;
 
 export default function MapPage() {
-  const { data, events, now } = useData();
+  const { data, events, now, today } = useData();
   const [params, setParams] = useSearchParams();
-  const [period, setPeriod] = useState<Period>('all');
+  const period = usePeriod(today);
   const [mode, setMode] = useState<MapMode>('heat');
   const [focus, setFocus] = useState<{ lat: number; lng: number; key: number } | null>(null);
   const uid = params.get('user') ?? '';
@@ -28,9 +20,8 @@ export default function MapPage() {
   const setUid = (v: string) => setParams(v ? { user: v } : {}, { replace: true });
 
   const inPeriod = useMemo(() => {
-    const since = period === 'all' ? null : addDays(startOfDay(now), -(Number(period) - 1));
-    return data!.beers.filter((b) => (!since || (b.date && b.date >= since)) && (!uid || b.userId === uid));
-  }, [data, period, uid, now]);
+    return data!.beers.filter((b) => isInPeriod(b.date, period) && (!uid || b.userId === uid));
+  }, [data, period, uid]);
 
   const points = useMemo(() => toPoints(inPeriod), [inPeriod]);
 
@@ -69,12 +60,11 @@ export default function MapPage() {
       <header className="page-head">
         <div>
           <h1>Kaart</h1>
-          <p className="muted">Waar biertjes gelogd zijn, voor gebruikers die hun locatie delen. Nauwkeurig tot ongeveer 100 meter.</p>
+          <p className="muted">Waar biertjes gelogd zijn ({period.label}), voor gebruikers die hun locatie delen. Nauwkeurig tot ongeveer 100 meter. De periode kies je rechtsboven.</p>
         </div>
       </header>
 
       <div className="map-toolbar">
-        <Segmented label="Periode" value={period} onChange={setPeriod} options={PERIODS} />
         <Segmented
           label="Weergave"
           value={mode}
@@ -95,7 +85,7 @@ export default function MapPage() {
             points={points}
             usersById={data!.usersById}
             mode={mode}
-            fitKey={`${period}|${uid}`}
+            fitKey={`${period.key}|${uid}`}
             freshIds={freshIds}
             focus={focus}
           />

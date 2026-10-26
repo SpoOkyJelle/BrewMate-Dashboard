@@ -186,3 +186,66 @@ export function useChartProps() {
     },
   };
 }
+
+/* ---------------- Knop met bevestiging ---------------- */
+
+/**
+ * Eerste klik vraagt om bevestiging, pas de tweede voert de actie uit. Fouten verschijnen
+ * naast de knop. Voor acties die je niet makkelijk terugdraait.
+ */
+export function ConfirmButton({ label, confirmLabel, busyLabel = 'Bezig…', onConfirm, className = 'btn sm', danger = true, title }: {
+  label: ReactNode;
+  confirmLabel: string;
+  busyLabel?: string;
+  onConfirm: () => Promise<void>;
+  className?: string;
+  danger?: boolean;
+  title?: string;
+}) {
+  const [state, setState] = useState<'idle' | 'confirm' | 'busy'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  // Bevestiging vervalt vanzelf na een paar seconden.
+  useEffect(() => {
+    if (state !== 'confirm') return;
+    const t = setTimeout(() => setState('idle'), 5000);
+    return () => clearTimeout(t);
+  }, [state]);
+
+  const run = async () => {
+    setState('busy');
+    setError(null);
+    try {
+      await onConfirm();
+      setState('idle');
+    } catch (err) {
+      setError((err as Error).message || 'Dat lukte niet.');
+      setState('idle');
+    }
+  };
+
+  return (
+    <span className="confirm-inline">
+      {state === 'idle' ? (
+        <button type="button" className={className} title={title} onClick={(e) => { e.stopPropagation(); setState('confirm'); }}>
+          {label}
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            className={`${className}${danger ? ' danger' : ' primary'}`}
+            disabled={state === 'busy'}
+            onClick={(e) => { e.stopPropagation(); run(); }}
+          >
+            {state === 'busy' ? busyLabel : confirmLabel}
+          </button>
+          {state === 'confirm' && (
+            <button type="button" className={className} onClick={(e) => { e.stopPropagation(); setState('idle'); }}>Annuleren</button>
+          )}
+        </>
+      )}
+      {error && <span className="confirm-error" role="alert">{error}</span>}
+    </span>
+  );
+}

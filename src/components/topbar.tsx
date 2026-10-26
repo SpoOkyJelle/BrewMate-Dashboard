@@ -1,25 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { useData } from '../data';
 import { setThemePref, useThemePref, type ThemePref } from '../theme';
 import { displayName, fmtRelative } from '../utils';
 import { Avatar } from './ui';
-import {
-  IconArrowRight, IconAuto, IconChart, IconCompare, IconMap, IconMessage, IconMoon, IconNetwork, IconRetention,
-  IconSearch, IconShield, IconSun, IconUsers,
-} from './icons';
+import { IconArrowRight, IconAuto, IconMoon, IconSearch, IconSun } from './icons';
+import { NAV } from '../nav';
+import { PeriodPicker } from './PeriodPicker';
 
-const PAGES: { to: string; label: string; icon: ReactNode }[] = [
-  { to: '/', label: 'Overzicht', icon: <IconChart /> },
-  { to: '/users', label: 'Gebruikers', icon: <IconUsers /> },
-  { to: '/retention', label: 'Behoud', icon: <IconRetention /> },
-  { to: '/map', label: 'Kaart', icon: <IconMap /> },
-  { to: '/network', label: 'Netwerk', icon: <IconNetwork /> },
-  { to: '/compare', label: 'Vergelijken', icon: <IconCompare /> },
-  { to: '/messages', label: 'Berichten', icon: <IconMessage /> },
-  { to: '/admins', label: 'Beheerders', icon: <IconShield /> },
-];
+/** Pagina's die met de gedeelde periode rekenen; alleen daar staat de periodekiezer. */
+const PERIOD_PAGES = ['/', '/map'];
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -38,6 +29,7 @@ export function Topbar() {
   const { user } = useAuth();
   const { data, now } = useData();
   const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
 
   // Ctrl+K / ⌘K opent het zoekvenster overal in het dashboard.
   useEffect(() => {
@@ -60,6 +52,7 @@ export function Topbar() {
         <span className="topbar-date">{now.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
         <span className="topbar-greet">{greeting(now)}{name && <>, <strong>{name}</strong></>}</span>
       </div>
+      {PERIOD_PAGES.includes(pathname) && <PeriodPicker />}
       <button className="topbar-search" onClick={() => setOpen(true)} aria-label="Zoeken">
         <IconSearch />
         <span className="topbar-search-text">Zoek een gebruiker of pagina</span>
@@ -118,7 +111,7 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const items = useMemo<Item[]>(() => {
     const q = norm(query.trim());
-    const pages = PAGES.filter((p) => !q || norm(p.label).includes(q))
+    const pages = NAV.filter((p) => !q || norm(p.label).includes(q))
       .map((p) => ({ kind: 'page' as const, key: `p${p.to}`, ...p }));
     let users = data?.users ?? [];
     if (q) {

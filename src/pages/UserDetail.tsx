@@ -7,9 +7,10 @@ import { useCachedImage } from '../imageCache';
 import { achievementsFor } from '../achievements';
 import { AchievementGrid } from '../components/achievements';
 import { addAdmin, adminErrorMessage, useAdmins } from '../admins';
-import { Avatar, Card, Empty, useChartProps } from '../components/ui';
+import { Avatar, Card, ConfirmButton, Empty, useChartProps } from '../components/ui';
+import { deleteBeer, functionErrorMessage, setUserBlocked, useBlockedUsers } from '../moderation';
 import { CalendarHeatmap } from '../components/charts';
-import { IconArrowLeft, IconCopy } from '../components/icons';
+import { IconArrowLeft, IconCopy, IconTrash } from '../components/icons';
 import {
   addDays, dayKey, displayName, fmtDate, fmtDateTime, fmtLiters, fmtNum, fmtRelative, fmtShortDate, fmtVolume,
   startOfWeek, weeksBetween,
@@ -32,7 +33,7 @@ function Pref({ label, value }: { label: string; value: boolean | null }) {
 
 export default function UserDetail() {
   const { uid = '' } = useParams();
-  const { data, now, events } = useData();
+  const { data, now, today, events } = useData();
   const chart = useChartProps();
   const [copied, setCopied] = useState(false);
   const { user: me } = useAuth();
@@ -41,6 +42,17 @@ export default function UserDetail() {
   const [adminError, setAdminError] = useState<string | null>(null);
   const user = data!.usersById.get(uid);
   const isAdmin = !!admins?.some((a) => a.uid === uid);
+  const blockedUsers = useBlockedUsers();
+  const block = blockedUsers.get(uid);
+
+  /** Voert een Cloud Function uit en zet een fout om in een leesbare melding. */
+  const call = (fnName: string, fn: () => Promise<void>) => async () => {
+    try {
+      await fn();
+    } catch (err) {
+      throw new Error(functionErrorMessage(err, fnName));
+    }
+  };
   const bannerSrc = useCachedImage(user?.bannerUrl);
   const achievements = useMemo(() => achievementsFor(data!).get(uid), [data, uid]);
 
@@ -61,7 +73,7 @@ export default function UserDetail() {
   const freshBeerIds = useMemo(() => new Set(events.filter((e) => e.kind === 'beer').map((e) => e.docId)), [events]);
 
   const weekly = useMemo(() => {
-    const start = addDays(startOfWeek(now), -7 * (WEEKS - 1));
+    const start = addDays(startOfWeek(today), -7 * (WEEKS - 1));
     const rows = Array.from({ length: WEEKS }, (_, i) => ({ label: fmtShortDate(addDays(start, i * 7)), biertjes: 0 }));
     for (const b of beers) {
       if (!b.date || b.date < start) continue;
@@ -69,7 +81,7 @@ export default function UserDetail() {
       if (i >= 0 && i < WEEKS) rows[i].biertjes++;
     }
     return rows;
-  }, [beers, now]);
+  }, [beers, today]);
 
   const insights = useMemo(() => {
     const days = new Map<string, number>();
@@ -123,6 +135,7 @@ export default function UserDetail() {
             <h1 className="profile-name">
               {user.username || 'Geen gebruikersnaam'}
               {isAdmin && <Link to="/admins" className="status s-admin">Beheerder</Link>}
+              {block && <span className="status s-blocked" title={block.reason || undefined}>Geblokkeerd</span>}
             </h1>
             <div className="muted">{user.email}</div>
             <button className="uid" onClick={copyUid} title="Kopieer gebruikers-ID">
@@ -139,14 +152,37 @@ export default function UserDetail() {
             {user.hasPushToken && user.notifyPushEnabled !== false && (
               <Link className="btn sm" to={`/messages?u=${user.uid}`}>Stuur bericht</Link>
             )}
-            {admins && !isAdmin && (
+            {admins && !isAdmin && !block && (
               <button className="btn sm" onClick={makeAdmin} disabled={adminBusy}>
                 {adminBusy ? 'Bezig…' : 'Maak beheerder'}
               </button>
             )}
+            {!isAdmin && uid !== me?.uid && (
+              block ? (
+                <ConfirmButton
+                  label="Deblokkeren"
+                  confirmLabel="Ja, deblokkeer"
+                  danger={false}
+                  onConfirm={call('setUserBlocked', () => setUserBlocked(uid, false))}
+                />
+              ) : (
+                <ConfirmButton
+                  label="Blokkeren"
+                  confirmLabel="Ja, blokkeer"
+                  title="Zet het account uit: de persoon kan niet meer inloggen"
+                  onConfirm={call('setUserBlocked', () => setUserBlocked(uid, true))}
+                />
+              )
+            )}
           </div>
         </div>
         {adminError && <div className="banner error profile-banner-msg" role="alert">{adminError}</div>}
+        {block && (
+          <div className="banner error profile-banner-msg" role="status">
+            Geblokkeerd{block.blockedAt ? ` op ${fmtDateTime(block.blockedAt)}` : ''}{block.byEmail ? ` door ${block.byEmail}` : ''}.
+            Deze persoon kan niet meer inloggen in de app.{block.reason ? ` Reden: ${block.reason}` : ''}
+          </div>
+        )}
       </section>
 
       <dl className="facts">
@@ -228,7 +264,7 @@ export default function UserDetail() {
             <div className="table-wrap tall">
               <table className="table compact">
                 <thead>
-                  <tr><th>Wanneer</th><th className="num">Maat</th><th className="num">Proostjes</th><th>Locatie</th></tr>
+                  <tr><th>Wanneer</th><th className="num">Maat</th><th className="num">Proostjes</th><th>Locatie</th><th aria-label="Acties" /></tr>
                 </thead>
                 <tbody>
                   {beers.slice(0, 50).map((b) => (
@@ -237,6 +273,15 @@ export default function UserDetail() {
                       <td className="num">{fmtVolume(b.volume)}</td>
                       <td className="num">{b.toasts || ''}</td>
                       <td className="muted small">{b.hasLocation ? 'Gedeeld' : ''}</td>
+                      <td className="row-actions">
+                        <ConfirmButton
+                          label={<IconTrash width={15} height={15} />}
+                          title="Biertje verwijderen"
+                          confirmLabel="Verwijder"
+                          className="btn xs"
+                          onConfirm={call('deleteBeer', () => deleteBeer(b.id))}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
