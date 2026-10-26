@@ -20,6 +20,8 @@ const Compare = lazy(() => import('./pages/Compare'));
 const Messages = lazy(() => import('./pages/Messages'));
 const Quality = lazy(() => import('./pages/Quality'));
 const Admins = lazy(() => import('./pages/Admins'));
+const Guilds = lazy(() => import('./pages/Guilds'));
+const GuildDetail = lazy(() => import('./pages/GuildDetail'));
 
 export default function App() {
   return (
@@ -32,6 +34,8 @@ export default function App() {
         <Route path="/compare" element={<Compare />} />
         <Route path="/map" element={<MapPage />} />
         <Route path="/network" element={<Network />} />
+        <Route path="/guilds" element={<Guilds />} />
+        <Route path="/guilds/:id" element={<GuildDetail />} />
         <Route path="/retention" element={<Retention />} />
         <Route path="/messages" element={<Messages />} />
         <Route path="/quality" element={<Quality />} />

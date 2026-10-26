@@ -79,3 +79,6 @@ export const IconTrash = (p: P) => (
 export const IconClock = (p: P) => (
   <svg {...base} {...p}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
 );
+export const IconTrophy = (p: P) => (
+  <svg {...base} {...p}><path d="M7 4h10v5a5 5 0 0 1-10 0z" /><path d="M7 6H4.5A1.5 1.5 0 0 0 3 7.5 3.5 3.5 0 0 0 6.5 11H7M17 6h2.5A1.5 1.5 0 0 1 21 7.5 3.5 3.5 0 0 1 17.5 11H17" /><path d="M9.5 14.5 9 18h6l-.5-3.5M8 21h8" /></svg>
+);

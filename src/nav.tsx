@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import {
-  IconAlert, IconChart, IconCompare, IconMap, IconMessage, IconNetwork, IconRetention, IconShield, IconUsers,
+  IconAlert, IconChart, IconCompare, IconMap, IconMessage, IconNetwork, IconRetention, IconShield, IconTrophy, IconUsers,
 } from './components/icons';
 
 export interface NavItem {
@@ -18,6 +18,7 @@ export const NAV: NavItem[] = [
   { to: '/retention', label: 'Behoud', icon: <IconRetention /> },
   { to: '/map', label: 'Kaart', icon: <IconMap />, mobile: true },
   { to: '/network', label: 'Netwerk', icon: <IconNetwork /> },
+  { to: '/guilds', label: 'Guilds', icon: <IconTrophy /> },
   { to: '/compare', label: 'Vergelijken', icon: <IconCompare /> },
   { to: '/messages', label: 'Berichten', icon: <IconMessage />, mobile: true },
   { to: '/quality', label: 'Datakwaliteit', icon: <IconAlert /> },
