@@ -154,17 +154,26 @@ export function useGuildScores(guildId: string | undefined, seasonId: string) {
     if (!guildId) return;
     return onSnapshot(
       query(collection(db, 'guilds', guildId, 'seasonScores'), where('seasonId', '==', seasonId)),
-      (snap) => setScores(snap.docs.map((d) => {
-        const x = d.data();
-        return {
-          uid: String(x.uid ?? ''),
-          username: String(x.username ?? ''),
-          score: Number(x.score) || 0,
-          activeDays: Number(x.activeDays) || 0,
-          totalCl: Number(x.totalCl) || 0,
-          bestRhythm: Number(x.bestRhythm) || 0,
-        };
-      })),
+      (snap) => {
+        // One row per member: a per-season doc (id contains '__') wins over a
+        // stray legacy doc keyed by uid, so totals never double-count.
+        const byUid = new Map<string, GuildScoreRow & { id: string }>();
+        for (const d of snap.docs) {
+          const x = d.data();
+          const uid = String(x.uid ?? d.id);
+          const row = {
+            id: d.id, uid,
+            username: String(x.username ?? ''),
+            score: Number(x.score) || 0,
+            activeDays: Number(x.activeDays) || 0,
+            totalCl: Number(x.totalCl) || 0,
+            bestRhythm: Number(x.bestRhythm) || 0,
+          };
+          const existing = byUid.get(uid);
+          if (!existing || (row.id.includes('__') && !existing.id.includes('__'))) byUid.set(uid, row);
+        }
+        setScores([...byUid.values()].map(({ id: _id, ...rest }) => rest));
+      },
       () => setScores([]),
     );
   }, [guildId, seasonId]);

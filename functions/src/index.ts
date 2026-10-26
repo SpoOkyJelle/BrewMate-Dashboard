@@ -429,3 +429,32 @@ export const runLeagueRollover = onCall({ region: REGION, maxInstances: 1, timeo
     : previousSeason(newSeason);
   return rolloverLeagues(endingSeason, newSeason);
 });
+
+/**
+ * Admin one-off: remove legacy per-member score docs (keyed by uid, from before
+ * we switched to `${seasonId}__${uid}`) and recompute each guild's denormalised
+ * seasonPoints counting every member once. Safe to run repeatedly.
+ */
+export const cleanupGuildScores = onCall({ region: REGION, maxInstances: 1, timeoutSeconds: 540 }, async (req) => {
+  await requireAdmin(req, 'guildscores opschonen');
+  const season = seasonIdFor(new Date());
+  const guildsSnap = await db.collection('guilds').get();
+  let legacyDeleted = 0;
+  for (const g of guildsSnap.docs) {
+    const scores = await g.ref.collection('seasonScores').get();
+    for (const d of scores.docs) {
+      if (!d.id.includes('__')) { await d.ref.delete(); legacyDeleted++; }
+    }
+    // Recompute the current-season total from the remaining per-season docs,
+    // one entry per member.
+    const byUid = new Map<string, number>();
+    for (const d of scores.docs) {
+      if (!d.id.includes('__') || d.get('seasonId') !== season) continue;
+      byUid.set(String(d.get('uid') ?? d.id), Number(d.get('score')) || 0);
+    }
+    const total = [...byUid.values()].reduce((sum, v) => sum + v, 0);
+    await g.ref.update({ seasonPoints: total, seasonId: season });
+  }
+  logger.info('Guild score cleanup done', { guilds: guildsSnap.size, legacyDeleted, season });
+  return { guilds: guildsSnap.size, legacyDeleted, season };
+});

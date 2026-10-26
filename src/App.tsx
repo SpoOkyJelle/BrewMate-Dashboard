@@ -1,9 +1,11 @@
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useAuth } from './auth';
 import { DataProvider, useData } from './data';
 import { fmtNum, fmtRelative } from './utils';
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { IconLogout, IconMore } from './components/icons';
+import {
+  IconChart, IconCompare, IconLogout, IconMap, IconMessage, IconMore, IconNetwork, IconRetention, IconShield, IconTrophy, IconUsers,
+} from './components/icons';
 import { Toasts } from './components/live';
 import { Topbar } from './components/topbar';
 import { NAV } from './nav';
@@ -28,18 +30,20 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<RequireAdmin />}>
-        <Route path="/" element={<Overview />} />
-        <Route path="/users" element={<Users />} />
-        <Route path="/users/:uid" element={<UserDetail />} />
-        <Route path="/compare" element={<Compare />} />
-        <Route path="/map" element={<MapPage />} />
-        <Route path="/network" element={<Network />} />
-        <Route path="/guilds" element={<Guilds />} />
-        <Route path="/guilds/:id" element={<GuildDetail />} />
-        <Route path="/retention" element={<Retention />} />
-        <Route path="/messages" element={<Messages />} />
-        <Route path="/quality" element={<Quality />} />
-        <Route path="/admins" element={<Admins />} />
+        <Route element={<Layout />}>
+          <Route path="/" element={<Overview />} />
+          <Route path="/users" element={<Users />} />
+          <Route path="/users/:uid" element={<UserDetail />} />
+          <Route path="/retention" element={<Retention />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/network" element={<Network />} />
+          <Route path="/guilds" element={<Guilds />} />
+          <Route path="/guilds/:id" element={<GuildDetail />} />
+          <Route path="/compare" element={<Compare />} />
+          <Route path="/messages" element={<Messages />} />
+          <Route path="/quality" element={<Quality />} />
+          <Route path="/admins" element={<Admins />} />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -52,7 +56,7 @@ function RequireAdmin() {
   if (status !== 'admin') return <Navigate to="/login" replace />;
   return (
     <DataProvider>
-      <Layout />
+      <Outlet />
     </DataProvider>
   );
 }
@@ -88,12 +92,18 @@ function Layout() {
           </div>
         </div>
         <nav className="nav" aria-label="Hoofdmenu">
-          {NAV.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === '/'}>
-              {item.icon} <span>{item.label}</span>
-              {item.to === '/users' && data && <span className="nav-count">{fmtNum(data.users.length)}</span>}
-            </NavLink>
-          ))}
+          <NavLink to="/" end><IconChart /> <span>Overzicht</span></NavLink>
+          <NavLink to="/users">
+            <IconUsers /> <span>Gebruikers</span>
+            {data && <span className="nav-count">{fmtNum(data.users.length)}</span>}
+          </NavLink>
+          <NavLink to="/retention"><IconRetention /> <span>Behoud</span></NavLink>
+          <NavLink to="/map"><IconMap /> <span>Kaart</span></NavLink>
+          <NavLink to="/network"><IconNetwork /> <span>Netwerk</span></NavLink>
+          <NavLink to="/guilds"><IconTrophy /> <span>Guilds</span></NavLink>
+          <NavLink to="/compare"><IconCompare /> <span>Vergelijken</span></NavLink>
+          <NavLink to="/messages"><IconMessage /> <span>Berichten</span></NavLink>
+          <NavLink to="/admins"><IconShield /> <span>Beheerders</span></NavLink>
         </nav>
         <div className="sidebar-foot">
           <LiveBadge />

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, Empty, Segmented } from '../components/ui';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
+import { Card, ConfirmButton, Empty, Segmented } from '../components/ui';
 import { IconSearch } from '../components/icons';
 import { fmtNum } from '../utils';
 import {
@@ -41,6 +43,14 @@ export default function Guilds() {
   const { guilds, error } = useGuilds();
   const [tierFilter, setTierFilter] = useState<number>(0); // 0 = all
   const [query, setQuery] = useState('');
+  const [cleanupMsg, setCleanupMsg] = useState<string | null>(null);
+
+  const runCleanup = async () => {
+    setCleanupMsg(null);
+    const res = await httpsCallable<unknown, { guilds: number; legacyDeleted: number }>(functions, 'cleanupGuildScores')();
+    const { guilds: n, legacyDeleted } = res.data;
+    setCleanupMsg(`Opgeschoond: ${legacyDeleted} oude scoredocs verwijderd, ${n} guilds herberekend.`);
+  };
 
   const perTier = useMemo(() => {
     const counts = new Map<number, number>();
@@ -64,9 +74,17 @@ export default function Guilds() {
             {guilds ? `${fmtNum(guilds.length)} guilds` : 'Laden…'} · seizoen {seasonLabel(currentSeasonId())}
           </p>
         </div>
+        <ConfirmButton
+          label="Scores opschonen"
+          confirmLabel="Ja, opschonen"
+          danger={false}
+          title="Verwijdert oude dubbele scoredocs en herberekent de seizoenspunten"
+          onConfirm={runCleanup}
+        />
       </header>
 
       {error && <div className="banner error" role="alert">De guilds kunnen niet geladen worden: {error}</div>}
+      {cleanupMsg && <div className="banner ok" role="status">{cleanupMsg}</div>}
 
       {/* Verdeling over de divisies */}
       <Card title="Divisies" hint="Aantal guilds per league">

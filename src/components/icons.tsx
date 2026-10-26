@@ -82,3 +82,9 @@ export const IconClock = (p: P) => (
 export const IconTrophy = (p: P) => (
   <svg {...base} {...p}><path d="M7 4h10v5a5 5 0 0 1-10 0z" /><path d="M7 6H4.5A1.5 1.5 0 0 0 3 7.5 3.5 3.5 0 0 0 6.5 11H7M17 6h2.5A1.5 1.5 0 0 1 21 7.5 3.5 3.5 0 0 1 17.5 11H17" /><path d="M9.5 14.5 9 18h6l-.5-3.5M8 21h8" /></svg>
 );
+export const IconPresent = (p: P) => (
+  <svg {...base} {...p}><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+);
+export const IconClose = (p: P) => (
+  <svg {...base} {...p}><path d="M6 6l12 12M18 6 6 18" /></svg>
+);
