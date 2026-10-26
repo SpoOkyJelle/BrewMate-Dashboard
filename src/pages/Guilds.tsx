@@ -9,6 +9,16 @@ import {
   LEAGUES, currentSeasonId, leagueForTier, seasonLabel, useGuilds, type GuildRow,
 } from '../guilds';
 
+interface PlanMove {
+  guildId: string; name: string; tag: string;
+  tier: number; newTier: number; outcome: 'promoted' | 'relegated' | 'stayed';
+  points: number; rank: number; tierSize: number;
+}
+interface RolloverResult {
+  dryRun: boolean; season: string; newSeason?: string;
+  minTierSize: number; promoted: number; relegated: number; moves: PlanMove[];
+}
+
 export function Emblem({ color, tag, size = 40 }: { color: string; tag: string; size?: number }) {
   return (
     <span
@@ -50,6 +60,39 @@ export default function Guilds() {
     const res = await httpsCallable<unknown, { guilds: number; legacyDeleted: number }>(functions, 'cleanupGuildScores')();
     const { guilds: n, legacyDeleted } = res.data;
     setCleanupMsg(`Opgeschoond: ${legacyDeleted} oude scoredocs verwijderd, ${n} guilds herberekend.`);
+  };
+
+  const [plan, setPlan] = useState<RolloverResult | null>(null);
+  const [planErr, setPlanErr] = useState<string | null>(null);
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
+
+  const runReset = async () => {
+    setResetMsg(null); setPlanErr(null); setPlan(null);
+    try {
+      const res = await httpsCallable<unknown, { guilds: number; scoresDeleted: number; historyDeleted: number; locksDeleted: number }>(
+        functions, 'resetLeagues',
+      )();
+      const { guilds: n, scoresDeleted, historyDeleted } = res.data;
+      setResetMsg(`${n} guilds teruggezet naar de laagste divisie. ${scoresDeleted} scoredocs en ${historyDeleted} geschiedenis-items verwijderd.`);
+    } catch (e) {
+      setPlanErr(`${(e as { code?: string })?.code ?? 'fout'}: ${(e as { message?: string })?.message ?? String(e)}`);
+    }
+  };
+
+  const runRollover = async (dryRun: boolean) => {
+    setPlanErr(null);
+    try {
+      const res = await httpsCallable<{ dryRun: boolean }, RolloverResult>(functions, 'simulateLeagueRollover')({ dryRun });
+      setPlan(res.data);
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      const message = (e as { message?: string })?.message ?? String(e);
+      setPlanErr(
+        code === 'functions/internal' || code === 'internal'
+          ? 'De functie "simulateLeagueRollover" reageert niet. Is hij al gedeployed? (firebase deploy --only functions)'
+          : `${code ?? 'fout'}: ${message}`,
+      );
+    }
   };
 
   const perTier = useMemo(() => {
@@ -109,6 +152,56 @@ export default function Guilds() {
         </div>
       </Card>
 
+      {/* Seizoen afrekenen / simuleren */}
+      <Card
+        title="Seizoen afrekenen"
+        hint="Promotie/degradatie van de top/onder 25% per divisie"
+        actions={
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn sm" onClick={() => runRollover(true)}>Preview (simulatie)</button>
+            <ConfirmButton
+              label="Nu afrekenen"
+              confirmLabel="Ja, echt afrekenen"
+              title="Voert de rollover nu echt uit: verplaatst tiers en zet de punten op 0"
+              onConfirm={() => runRollover(false)}
+            />
+            <ConfirmButton
+              label="Divisies resetten"
+              confirmLabel="Ja, alles resetten"
+              title="Zet alle guilds terug naar de laagste divisie en wist scores, geschiedenis en locks"
+              onConfirm={runReset}
+            />
+          </div>
+        }
+      >
+        {planErr && <div className="banner error" role="alert">{planErr}</div>}
+        {resetMsg && <div className="banner ok" role="status">{resetMsg}</div>}
+        {!plan ? (
+          <p className="muted">
+            Preview toont wie zou promoveren of degraderen op de huidige stand, zónder iets te wijzigen.
+            Een divisie heeft minstens een paar guilds nodig voordat er beweging is.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="banner ok" role="status">
+              {plan.dryRun
+                ? `Simulatie van seizoen ${seasonLabel(plan.season)}: ${plan.promoted} promoties, ${plan.relegated} degradaties (niets gewijzigd).`
+                : `Afgerekend: seizoen ${seasonLabel(plan.season)} → ${plan.newSeason ? seasonLabel(plan.newSeason) : '?'}. ${plan.promoted} gepromoveerd, ${plan.relegated} gedegradeerd, punten gereset.`}
+            </div>
+            {plan.moves.length === 0 ? (
+              <Empty>Geen guilds om af te rekenen</Empty>
+            ) : (
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {plan.moves.map((m) => <PlanRow key={m.guildId} m={m} />)}
+              </ul>
+            )}
+            <p className="muted small">
+              Beweging vereist minstens {plan.minTierSize} guilds in een divisie.
+            </p>
+          </div>
+        )}
+      </Card>
+
       {/* Ranglijst */}
       <Card
         title="Ranglijst"
@@ -139,6 +232,31 @@ export default function Guilds() {
         )}
       </Card>
     </div>
+  );
+}
+
+function PlanRow({ m }: { m: PlanMove }) {
+  const from = leagueForTier(m.tier);
+  const to = leagueForTier(m.newTier);
+  const color = m.outcome === 'promoted' ? '#10B981' : m.outcome === 'relegated' ? '#EF4444' : 'var(--muted)';
+  const label = m.outcome === 'promoted' ? '▲ Promotie' : m.outcome === 'relegated' ? '▼ Degradatie' : 'Blijft';
+  return (
+    <li style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+      border: '1px solid var(--border)', borderRadius: 12, background: 'var(--surface)',
+    }}>
+      <Emblem color={to.color} tag={m.tag} size={28} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--muted)' }}>[{m.tag}] </span>{m.name}
+        </div>
+        <div className="muted small">#{m.rank}/{m.tierSize} · {fmtNum(m.points)} punten</div>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color }}>{label}</div>
+        <div className="muted small">{from.name}{m.newTier !== m.tier ? ` → ${to.name}` : ''}</div>
+      </div>
+    </li>
   );
 }
 

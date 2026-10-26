@@ -4,7 +4,7 @@ import { useAuth } from './auth';
 import { DataProvider, useData } from './data';
 import { fmtNum, fmtRelative } from './utils';
 import {
-  IconChart, IconCompare, IconLogout, IconMap, IconMessage, IconMore, IconNetwork, IconRetention, IconShield, IconTrophy, IconUsers,
+  IconChart, IconCompare, IconLogout, IconMap, IconMessage, IconMore, IconNetwork, IconPresent, IconRetention, IconShield, IconTrophy, IconUsers,
 } from './components/icons';
 import { Toasts } from './components/live';
 import { Topbar } from './components/topbar';
@@ -24,6 +24,7 @@ const Quality = lazy(() => import('./pages/Quality'));
 const Admins = lazy(() => import('./pages/Admins'));
 const Guilds = lazy(() => import('./pages/Guilds'));
 const GuildDetail = lazy(() => import('./pages/GuildDetail'));
+const Events = lazy(() => import('./pages/Events'));
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/network" element={<Network />} />
           <Route path="/guilds" element={<Guilds />} />
           <Route path="/guilds/:id" element={<GuildDetail />} />
+          <Route path="/events" element={<Events />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/quality" element={<Quality />} />
@@ -101,6 +103,7 @@ function Layout() {
           <NavLink to="/map"><IconMap /> <span>Kaart</span></NavLink>
           <NavLink to="/network"><IconNetwork /> <span>Netwerk</span></NavLink>
           <NavLink to="/guilds"><IconTrophy /> <span>Guilds</span></NavLink>
+          <NavLink to="/events"><IconPresent /> <span>Events</span></NavLink>
           <NavLink to="/compare"><IconCompare /> <span>Vergelijken</span></NavLink>
           <NavLink to="/messages"><IconMessage /> <span>Berichten</span></NavLink>
           <NavLink to="/admins"><IconShield /> <span>Beheerders</span></NavLink>
